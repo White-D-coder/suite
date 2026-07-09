@@ -1,0 +1,33 @@
+# ── Dependencies ──────────────────────────────────────
+node_modules/
+
+# ── Build output ──────────────────────────────────────
+dist/
+*.tsbuildinfo
+
+# ── Environment / Secrets ─────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Prisma ────────────────────────────────────────────
+# Keep schema.prisma; ignore generated client cache
+node_modules/.prisma/
+
+# ── Local file uploads ────────────────────────────────
+uploads/*
+!uploads/.gitkeep
+
+# ── Logs ──────────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+
+# ── OS / Editor ───────────────────────────────────────
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# ── Test coverage ─────────────────────────────────────
+coverage/

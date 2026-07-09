@@ -1,0 +1,46 @@
+# ── Dependencies ──────────────────────────────────────
+node_modules/
+
+# ── Build outputs ─────────────────────────────────────
+dist/
+dist-ssr/
+build/
+*.tsbuildinfo
+
+# ── Environment / Secrets ─────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Prisma generated ──────────────────────────────────
+# (keep schema.prisma but not the generated client)
+backend/node_modules/.prisma/
+
+# ── Uploads / Local storage ───────────────────────────
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# ── Logs ──────────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+
+# ── OS / Editor ───────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ── Test / Coverage ───────────────────────────────────
+coverage/
+.nyc_output/
+
+# ── Docker volumes (don't commit data) ────────────────
+pgdata*/

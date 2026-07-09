@@ -1,0 +1,35 @@
+# Ignore Node modules
+**/node_modules
+node_modules/
+
+# Ignore build artifacts
+**/dist
+dist/
+build/
+.next/
+
+# Ignore local environment keys
+**/.env
+**/.env.*
+.env
+.env.*
+
+# Ignore logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Ignore Git files
+.git
+.gitignore
+.gitattributes
+
+# Ignore IDE configs
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

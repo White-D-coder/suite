@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: agency-db-prod
+    restart: always
+    environment:
+      POSTGRES_DB: agency_db
+      POSTGRES_USER: agency_admin
+      POSTGRES_PASSWORD: production_db_secret_key
+    volumes:
+      - pgdata-prod:/var/lib/postgresql/data
+    networks:
+      - agency-network
+    expose:
+      - 5432
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: agency-redis-prod
+    restart: always
+    networks:
+      - agency-network
+    expose:
+      - 6379
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: agency-backend-prod
+    restart: always
+    depends_on:
+      - db
+      - redis
+    environment:
+      - PORT=3000
+      - FRONTEND_URL=http://localhost:8080,http://localhost,http://localhost:5173
+      - DATABASE_URL=postgresql://agency_admin:production_db_secret_key@db:5432/agency_db?schema=public
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=change_this_to_a_long_random_production_secret
+      - ENCRYPTION_KEY=BTnzlxxiWM/8CQEluwVGHelfN9Ikdl3GX4HHbo/QELI=
+      - GITHUB_TOKEN=
+      - TWILIO_ACCOUNT_SID=
+      - TWILIO_AUTH_TOKEN=
+      - TWILIO_WHATSAPP_NUMBER=
+      - SMTP_HOST=
+      - SMTP_PORT=587
+      - SMTP_USER=
+      - SMTP_PASS=
+      - SMTP_FROM="Agency Control Center" <noreply@agency.com>
+      - S3_ENDPOINT=
+      - S3_ACCESS_KEY=
+      - S3_SECRET_KEY=
+      - S3_BUCKET=
+    volumes:
+      - uploads-data-prod:/usr/src/app/uploads
+    networks:
+      - agency-network
+    ports:
+      - "3000:3000"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: agency-frontend-prod
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+    networks:
+      - agency-network
+
+volumes:
+  pgdata-prod:
+  uploads-data-prod:
+
+networks:
+  agency-network:
+    driver: bridge
