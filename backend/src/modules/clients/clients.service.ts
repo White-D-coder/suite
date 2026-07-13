@@ -15,6 +15,13 @@ export class ClientsService {
 
   async findAll() {
     return this.prisma.client.findMany({
+      include: {
+        contacts: {
+          include: {
+            channels: true,
+          },
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -23,12 +30,31 @@ export class ClientsService {
     const client = await this.prisma.client.findUnique({
       where: { id },
       include: {
-        projects: true,
-        invoices: true,
+        projects: {
+          include: {
+            assignments: {
+              include: {
+                employee: true,
+              },
+            },
+          },
+        },
+        invoices: {
+          include: {
+            lineItems: true,
+            schedules: true,
+            project: true,
+          }
+        },
         communications: {
           orderBy: { sentAt: 'desc' },
         },
         income: true,
+        contacts: {
+          include: {
+            channels: true,
+          },
+        },
       },
     });
     if (!client) {
@@ -38,7 +64,6 @@ export class ClientsService {
   }
 
   async update(id: string, updateClientDto: UpdateClientDto) {
-    // Check existence
     await this.findOne(id);
     return this.prisma.client.update({
       where: { id },
@@ -47,10 +72,65 @@ export class ClientsService {
   }
 
   async remove(id: string) {
-    // Check existence
     await this.findOne(id);
     return this.prisma.client.delete({
       where: { id },
+    });
+  }
+
+  // Client Contacts CRUD
+  async addContact(clientId: string, data: any) {
+    await this.findOne(clientId);
+    return this.prisma.clientContact.create({
+      data: {
+        clientId,
+        name: data.name,
+        role: data.role || 'POC',
+        email: data.email,
+        primaryNumber: data.primaryNumber,
+        relationshipLabel: data.relationshipLabel,
+        isPrimary: data.isPrimary ?? false,
+        preferredForBilling: data.preferredForBilling ?? false,
+        preferredForUrgent: data.preferredForUrgent ?? false,
+        timeZone: data.timeZone || 'UTC',
+        consentStatus: data.consentStatus || 'granted',
+      },
+    });
+  }
+
+  async removeContact(contactId: string) {
+    const contact = await this.prisma.clientContact.findUnique({ where: { id: contactId } });
+    if (!contact) {
+      throw new NotFoundException(`Contact not found`);
+    }
+    return this.prisma.clientContact.delete({
+      where: { id: contactId },
+    });
+  }
+
+  // Contact Channels CRUD
+  async addChannel(contactId: string, data: any) {
+    const contact = await this.prisma.clientContact.findUnique({ where: { id: contactId } });
+    if (!contact) {
+      throw new NotFoundException(`Contact not found`);
+    }
+    return this.prisma.contactChannel.create({
+      data: {
+        contactId,
+        phoneType: data.phoneType,
+        numberOrAddress: data.numberOrAddress,
+        isPreferred: data.isPreferred ?? false,
+      },
+    });
+  }
+
+  async removeChannel(channelId: string) {
+    const channel = await this.prisma.contactChannel.findUnique({ where: { id: channelId } });
+    if (!channel) {
+      throw new NotFoundException(`Channel not found`);
+    }
+    return this.prisma.contactChannel.delete({
+      where: { id: channelId },
     });
   }
 }
