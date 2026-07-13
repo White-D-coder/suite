@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import { api } from '../lib/api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
 import { Search, Plus, Building, User, Mail, AlertTriangle, Loader2, ArrowRight } from 'lucide-react';
@@ -18,17 +18,64 @@ const emptyForm = {
 const inputCls = 't-input w-full px-3 py-2.5 text-sm';
 const rSm = { borderRadius: 'var(--radius-sm)' };
 
+const countryCurrencyMap: Record<string, string> = {
+  'united states': 'USD',
+  'us': 'USD',
+  'usa': 'USD',
+  'united kingdom': 'GBP',
+  'uk': 'GBP',
+  'great britain': 'GBP',
+  'england': 'GBP',
+  'germany': 'EUR',
+  'france': 'EUR',
+  'italy': 'EUR',
+  'spain': 'EUR',
+  'netherlands': 'EUR',
+  'belgium': 'EUR',
+  'ireland': 'EUR',
+  'europe': 'EUR',
+  'eu': 'EUR',
+  'india': 'INR',
+  'in': 'INR',
+  'canada': 'CAD',
+  'ca': 'CAD',
+  'australia': 'AUD',
+  'au': 'AUD',
+  'japan': 'JPY',
+  'jp': 'JPY',
+  'singapore': 'SGD',
+  'sg': 'SGD',
+  'switzerland': 'CHF',
+  'ch': 'CHF',
+};
+
+function getCurrencyByCountry(country: string): string {
+  const c = country.trim().toLowerCase();
+  return countryCurrencyMap[c] || 'USD';
+}
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <div className="space-y-1"><label className="t-label">{label}</label>{children}</div>;
 }
 
 export default function Clients() {
+  const { user } = useOutletContext<{ user: any }>();
+  const role = user?.role || 'employee';
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState('');
+
+  const handleCountryChange = (countryName: string) => {
+    const inferred = getCurrencyByCountry(countryName);
+    setForm(prev => ({
+      ...prev,
+      country: countryName,
+      currency: inferred
+    }));
+  };
 
   const { data: clients, isLoading } = useQuery<Client[]>({
     queryKey: ['clients-list'],
@@ -66,51 +113,53 @@ export default function Clients() {
           <h1 className="t-page-title">Clients CRM</h1>
           <p className="t-page-subtitle">Manage accounts, billing defaults, and client relations.</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <button className="t-btn-primary flex items-center gap-2 text-sm">
-              <Plus className="h-4 w-4" />Add Client
-            </button>
-          </DialogTrigger>
-          <DialogContent className="max-w-xl" style={{ background: 'var(--surface-card)', border: '1px solid var(--border-default)' }}>
-            <DialogHeader>
-              <DialogTitle style={{ color: 'var(--text-primary)' }}>New Client Registry</DialogTitle>
-            </DialogHeader>
-            {formError && (
-              <div className="flex items-center gap-2 text-xs p-2.5 rounded-md"
-                style={{ background: 'rgba(243,195,178,0.2)', border: '1px solid var(--accent-warning)', color: 'var(--accent-warning-fg)', ...rSm }}>
-                <AlertTriangle className="h-4 w-4 shrink-0" />{formError}
-              </div>
-            )}
-            <form onSubmit={handleSubmit} className="space-y-4 pt-2">
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Client Name *"><input className={inputCls} style={rSm} placeholder="John Doe" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required /></Field>
-                <Field label="Company"><input className={inputCls} style={rSm} placeholder="Acme Corp" value={form.company} onChange={e => setForm({ ...form, company: e.target.value })} /></Field>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Email"><input type="email" className={inputCls} style={rSm} placeholder="john@example.com" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></Field>
-                <Field label="Phone"><input className={inputCls} style={rSm} placeholder="+1 555-0199" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} /></Field>
-              </div>
-              <div className="grid grid-cols-3 gap-4">
-                <Field label="Country"><input className={inputCls} style={rSm} placeholder="United States" value={form.country} onChange={e => setForm({ ...form, country: e.target.value })} /></Field>
-                <Field label="Currency"><input className={inputCls} style={rSm} placeholder="USD" value={form.currency} onChange={e => setForm({ ...form, currency: e.target.value })} /></Field>
-                <Field label="Payment Terms"><input className={inputCls} style={rSm} placeholder="Net 30" value={form.paymentTerms} onChange={e => setForm({ ...form, paymentTerms: e.target.value })} /></Field>
-              </div>
-              <Field label="Billing Address">
-                <textarea className={`${inputCls} h-16 resize-none`} style={rSm} placeholder="123 Main St…" value={form.billingAddress} onChange={e => setForm({ ...form, billingAddress: e.target.value })} />
-              </Field>
-              <Field label="Notes">
-                <textarea className={`${inputCls} h-16 resize-none`} style={rSm} placeholder="Relationship notes…" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
-              </Field>
-              <div className="flex justify-end gap-2 pt-2">
-                <button type="button" className="t-btn-ghost text-sm" onClick={() => setOpen(false)}>Cancel</button>
-                <button type="submit" disabled={createMutation.isPending} className="t-btn-primary text-sm">
-                  {createMutation.isPending ? 'Saving…' : 'Register Client'}
-                </button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+        {role !== 'employee' && (
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <button className="t-btn-primary flex items-center gap-2 text-sm">
+                <Plus className="h-4 w-4" />Add Client
+              </button>
+            </DialogTrigger>
+            <DialogContent className="max-w-xl" style={{ background: 'var(--surface-card)', border: '1px solid var(--border-default)' }}>
+              <DialogHeader>
+                <DialogTitle style={{ color: 'var(--text-primary)' }}>New Client Registry</DialogTitle>
+              </DialogHeader>
+              {formError && (
+                <div className="flex items-center gap-2 text-xs p-2.5 rounded-md"
+                  style={{ background: 'rgba(243,195,178,0.2)', border: '1px solid var(--accent-warning)', color: 'var(--accent-warning-fg)', ...rSm }}>
+                  <AlertTriangle className="h-4 w-4 shrink-0" />{formError}
+                </div>
+              )}
+              <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Client Name *"><input className={inputCls} style={rSm} placeholder="John Doe" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required /></Field>
+                  <Field label="Company"><input className={inputCls} style={rSm} placeholder="Acme Corp" value={form.company} onChange={e => setForm({ ...form, company: e.target.value })} /></Field>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Email"><input type="email" className={inputCls} style={rSm} placeholder="john@example.com" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></Field>
+                  <Field label="Phone"><input className={inputCls} style={rSm} placeholder="+1 555-0199" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} /></Field>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <Field label="Country"><input className={inputCls} style={rSm} placeholder="United States" value={form.country} onChange={e => handleCountryChange(e.target.value)} /></Field>
+                  <Field label="Currency"><input className={inputCls} style={rSm} placeholder="USD" value={form.currency} onChange={e => setForm({ ...form, currency: e.target.value })} /></Field>
+                  <Field label="Payment Terms"><input className={inputCls} style={rSm} placeholder="Net 30" value={form.paymentTerms} onChange={e => setForm({ ...form, paymentTerms: e.target.value })} /></Field>
+                </div>
+                <Field label="Billing Address">
+                  <textarea className={`${inputCls} h-16 resize-none`} style={rSm} placeholder="123 Main St…" value={form.billingAddress} onChange={e => setForm({ ...form, billingAddress: e.target.value })} />
+                </Field>
+                <Field label="Notes">
+                  <textarea className={`${inputCls} h-16 resize-none`} style={rSm} placeholder="Relationship notes…" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
+                </Field>
+                <div className="flex justify-end gap-2 pt-2">
+                  <button type="button" className="t-btn-ghost text-sm" onClick={() => setOpen(false)}>Cancel</button>
+                  <button type="submit" disabled={createMutation.isPending} className="t-btn-primary text-sm">
+                    {createMutation.isPending ? 'Saving…' : 'Register Client'}
+                  </button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
       {/* Table card */}

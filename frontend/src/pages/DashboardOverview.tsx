@@ -1,5 +1,6 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -25,7 +26,7 @@ interface MonitorData {
 
 /* ── KPI Card ─────────────────────────────────────────── */
 function KpiCard({
-  label, value, sub, trend, trendLabel, icon: Icon, iconBg, iconColor,
+  label, value, sub, trend, trendLabel, icon: Icon, iconBg, iconColor, onClick,
 }: {
   label: string;
   value: string;
@@ -35,9 +36,29 @@ function KpiCard({
   icon: React.ElementType;
   iconBg: string;
   iconColor: string;
+  onClick?: () => void;
 }) {
   return (
-    <div className="kpi-card">
+    <div
+      className="kpi-card hover:border-[var(--accent)]"
+      onClick={onClick}
+      style={{
+        cursor: onClick ? 'pointer' : 'default',
+        transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s ease, box-shadow 0.2s ease',
+      }}
+      onMouseEnter={e => {
+        if (onClick) {
+          e.currentTarget.style.transform = 'translateY(-2px)';
+          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.05)';
+        }
+      }}
+      onMouseLeave={e => {
+        if (onClick) {
+          e.currentTarget.style.transform = 'translateY(0)';
+          e.currentTarget.style.boxShadow = 'none';
+        }
+      }}
+    >
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1rem' }}>
         <div style={{
           width: 40, height: 40, borderRadius: 10,
@@ -88,6 +109,7 @@ const ChartTooltip = ({ active, payload, label }: any) => {
 };
 
 export default function DashboardOverview() {
+  const navigate = useNavigate();
   const { data: finance, isLoading: financeLoading } = useQuery<DashboardData>({
     queryKey: ['finance-dashboard'],
     queryFn: () => api.get('/finance/dashboard').then(r => r.data),
@@ -174,6 +196,7 @@ export default function DashboardOverview() {
           icon={TrendingUp}
           iconBg="rgba(18,183,106,0.1)"
           iconColor="var(--success)"
+          onClick={() => navigate('/invoices')}
         />
         <KpiCard
           label="Unpaid Invoices"
@@ -184,6 +207,7 @@ export default function DashboardOverview() {
           icon={Receipt}
           iconBg="rgba(240,68,56,0.1)"
           iconColor="var(--error)"
+          onClick={() => navigate('/invoices')}
         />
         <KpiCard
           label="Monthly Expenses"
@@ -194,6 +218,7 @@ export default function DashboardOverview() {
           icon={CreditCard}
           iconBg="rgba(247,144,9,0.1)"
           iconColor="var(--warning)"
+          onClick={() => navigate('/finance')}
         />
         <KpiCard
           label="Infrastructure"
@@ -204,6 +229,7 @@ export default function DashboardOverview() {
           icon={Activity}
           iconBg="rgba(79,111,232,0.1)"
           iconColor="var(--accent)"
+          onClick={() => navigate('/projects')}
         />
       </div>
 
@@ -266,12 +292,17 @@ export default function DashboardOverview() {
                 return (
                   <div
                     key={ren.id}
+                    onClick={() => navigate('/finance')}
+                    className="hover:border-[var(--accent)] hover:bg-[var(--surface-card)] transition-colors duration-150 cursor-pointer"
                     style={{
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                       padding: '0.625rem 0.75rem',
                       background: 'var(--surface-sunken)',
                       borderRadius: 'var(--radius-sm)',
                       borderLeft: `3px solid ${color}`,
+                      borderTop: '1px solid transparent',
+                      borderRight: '1px solid transparent',
+                      borderBottom: '1px solid transparent',
                     }}
                   >
                     <div>

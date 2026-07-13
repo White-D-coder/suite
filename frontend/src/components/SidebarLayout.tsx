@@ -1,36 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { api } from '../lib/api';
 import {
   LayoutDashboard, Users, FolderKanban, KeyRound,
   FileText, DollarSign, Menu, X, LogOut, Bell,
-  Activity, BookOpen,
-  ChevronRight,
+  BookOpen, ChevronRight, ShieldAlert, UsersRound, Settings2, HelpCircle
 } from 'lucide-react';
-
-/* ─── Nav Structure ─────────────────────────────────────── */
-const NAV_SECTIONS = [
-  {
-    label: 'Core',
-    items: [
-      { to: '/dashboard/overview',  icon: LayoutDashboard, label: 'Overview'     },
-      { to: '/dashboard/clients',   icon: Users,           label: 'CRM'          },
-      { to: '/dashboard/projects',  icon: FolderKanban,    label: 'Projects'     },
-    ],
-  },
-  {
-    label: 'Finance',
-    items: [
-      { to: '/dashboard/invoices',  icon: FileText,   label: 'Invoices'      },
-      { to: '/dashboard/finance',   icon: BookOpen,   label: 'Finance'       },
-    ],
-  },
-  {
-    label: 'Operations',
-    items: [
-      { to: '/dashboard/vault',     icon: KeyRound,   label: 'Vault'         },
-    ],
-  },
-];
 
 /* ─── Pulse dot ─────────────────────────────────────────── */
 function LiveDot() {
@@ -64,8 +39,51 @@ function LiveClock() {
 
 export default function SidebarLayout() {
   const [open, setOpen] = useState(true);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [switching, setSwitching] = useState(false);
+  const [showRolesDropdown, setShowRolesDropdown] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+
+  useEffect(() => {
+    fetchUser();
+  }, []);
+
+  const fetchUser = async () => {
+    try {
+      const { data } = await api.get('/auth/me');
+      setCurrentUser(data);
+    } catch (err) {
+      console.error('Failed to fetch user', err);
+    }
+  };
+
+  const handleRoleSwitch = async (roleName: string) => {
+    setSwitching(true);
+    setShowRolesDropdown(false);
+    try {
+      const email = `${roleName}@agency.com`;
+      const password = `${roleName}password123`;
+      const { data } = await api.post('/auth/login', { email, password });
+      localStorage.setItem('agency_jwt_token', data.accessToken);
+      
+      const userRes = await api.get('/auth/me');
+      setCurrentUser(userRes.data);
+      
+      // Navigate to dashboard and reload
+      navigate('/dashboard/overview');
+      window.location.reload();
+    } catch (err) {
+      console.error('Failed to switch role', err);
+    } finally {
+      setSwitching(false);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('agency_jwt_token');
+    navigate('/login');
+  };
 
   /* derive page title from pathname */
   const segment = location.pathname.split('/').filter(Boolean)[1];
@@ -73,10 +91,46 @@ export default function SidebarLayout() {
     ? segment.charAt(0).toUpperCase() + segment.slice(1)
     : 'Overview';
 
-  function handleLogout() {
-    localStorage.removeItem('token');
-    navigate('/login');
-  }
+  // Dynamic Navigation Sections based on User Role
+  const role = currentUser?.role || 'employee';
+
+  const navSections = [
+    {
+      label: 'Core',
+      items: [
+        { to: '/dashboard/overview', icon: LayoutDashboard, label: 'Overview' },
+        ...(role !== 'employee' ? [{ to: '/dashboard/clients', icon: Users, label: 'CRM' }] : []),
+        { to: '/dashboard/projects', icon: FolderKanban, label: 'Projects' },
+      ],
+    },
+    ...(role !== 'employee'
+      ? [
+          {
+            label: 'Finance',
+            items: [
+              { to: '/dashboard/invoices', icon: FileText, label: 'Invoices' },
+              { to: '/dashboard/finance', icon: BookOpen, label: 'Finance' },
+            ],
+          },
+        ]
+      : []),
+    {
+      label: 'Operations',
+      items: [
+        { to: '/dashboard/vault', icon: KeyRound, label: 'Vault' },
+      ],
+    },
+    ...(['owner', 'admin'].includes(role)
+      ? [
+          {
+            label: 'Security',
+            items: [
+              { to: '/dashboard/audit-logs', icon: ShieldAlert, label: 'Audit Logs' },
+            ],
+          },
+        ]
+      : []),
+  ];
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--surface-body)' }}>
@@ -130,7 +184,7 @@ export default function SidebarLayout() {
 
         {/* Nav sections */}
         <nav style={{ flex: 1, padding: '0.75rem 0.625rem', overflowY: 'auto', overflowX: 'hidden' }}>
-          {NAV_SECTIONS.map((section) => (
+          {navSections.map((section) => (
             <div key={section.label} style={{ marginBottom: '1.5rem' }}>
               {open && (
                 <p style={{
@@ -216,7 +270,82 @@ export default function SidebarLayout() {
           <div style={{ flex: 1 }} />
 
           {/* Right side */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', position: 'relative' }}>
+            {/* DEV MODE ROLE SWITCHER */}
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => setShowRolesDropdown(!showRolesDropdown)}
+                disabled={switching}
+                className="t-btn-secondary"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  fontSize: '0.75rem',
+                  padding: '0.4rem 0.75rem',
+                  border: '1px solid var(--border-default)',
+                  borderRadius: 'var(--radius-md)',
+                  background: 'var(--accent-soft)',
+                  color: 'var(--accent)',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                <Settings2 size={13} />
+                <span>Switch Role ({role.toUpperCase()})</span>
+              </button>
+
+              {showRolesDropdown && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '110%',
+                    right: 0,
+                    width: '180px',
+                    background: 'var(--surface-card)',
+                    border: '1px solid var(--border-default)',
+                    borderRadius: 'var(--radius-md)',
+                    boxShadow: 'var(--shadow-lg)',
+                    zIndex: 100,
+                    padding: '0.5rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.25rem',
+                  }}
+                >
+                  <p style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-tertiary)', padding: '0 0.5rem', textTransform: 'uppercase' }}>
+                    Select Personas
+                  </p>
+                  {(['owner', 'admin', 'employee', 'finance'] as const).map((r) => (
+                    <button
+                      key={r}
+                      onClick={() => handleRoleSwitch(r)}
+                      style={{
+                        padding: '0.4rem 0.5rem',
+                        fontSize: '0.78rem',
+                        textAlign: 'left',
+                        border: 'none',
+                        background: role === r ? 'var(--accent-soft)' : 'transparent',
+                        color: role === r ? 'var(--accent)' : 'var(--text-secondary)',
+                        borderRadius: 'var(--radius-sm)',
+                        cursor: 'pointer',
+                        fontWeight: role === r ? 600 : 500,
+                        transition: 'background 120ms',
+                      }}
+                      onMouseEnter={e => {
+                        if (role !== r) e.currentTarget.style.background = 'var(--surface-sunken)';
+                      }}
+                      onMouseLeave={e => {
+                        if (role !== r) e.currentTarget.style.background = 'transparent';
+                      }}
+                    >
+                      {r.charAt(0).toUpperCase() + r.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Notification bell */}
             <button
               style={{
@@ -233,7 +362,7 @@ export default function SidebarLayout() {
               <Bell size={15} />
             </button>
 
-            {/* User avatar + logout */}
+            {/* User avatar */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <div style={{
                 width: 32, height: 32, borderRadius: 8,
@@ -242,9 +371,18 @@ export default function SidebarLayout() {
                 color: '#fff', fontWeight: 700, fontSize: '0.8rem',
                 flexShrink: 0,
               }}>
-                A
+                {currentUser?.name ? currentUser.name.charAt(0) : 'A'}
               </div>
-              <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>Admin</span>
+              {open && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    {currentUser?.name || 'Loading...'}
+                  </span>
+                  <span style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)', textTransform: 'capitalize' }}>
+                    {role}
+                  </span>
+                </div>
+              )}
             </div>
 
             <button
@@ -276,7 +414,14 @@ export default function SidebarLayout() {
 
         {/* Page content */}
         <main style={{ flex: 1, padding: '1.75rem 2rem', overflowY: 'auto' }}>
-          <Outlet />
+          {switching ? (
+            <div style={{ display: 'flex', flex: 1, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '5rem 0' }}>
+              <span className="animate-spin" style={{ fontSize: '2rem', color: 'var(--accent)' }}>⌛</span>
+              <p style={{ marginTop: '1rem', color: 'var(--text-secondary)' }}>Re-authenticating persona session...</p>
+            </div>
+          ) : (
+            <Outlet context={{ user: currentUser }} />
+          )}
         </main>
       </div>
     </div>

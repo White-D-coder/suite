@@ -17,6 +17,7 @@ import ProjectDetails from './pages/ProjectDetails';
 import Vault from './pages/Vault';
 import Invoices from './pages/Invoices';
 import Finance from './pages/Finance';
+import AuditLogs from './pages/AuditLogs';
 
 // Initialize TanStack React Query Client
 const queryClient = new QueryClient({
@@ -62,6 +63,7 @@ export default function App() {
             <Route path="vault" element={<Vault />} />
             <Route path="invoices" element={<Invoices />} />
             <Route path="finance" element={<Finance />} />
+            <Route path="audit-logs" element={<AuditLogs />} />
             {/* Catch-all redirect inside dashboard */}
             <Route path="*" element={<Navigate to="overview" replace />} />
           </Route>

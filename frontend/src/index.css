@@ -280,6 +280,28 @@
   }
   .t-btn-danger:hover { background: var(--error-bg); border-color: var(--error); }
 
+  .t-btn-secondary {
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--surface-card);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    font-weight: 600; font-size: 0.875rem;
+    min-height: 32px; padding: 0 1rem;
+    cursor: pointer;
+    transition: background 150ms, border-color 150ms, color 150ms;
+    white-space: nowrap; gap: 0.5rem;
+  }
+  .t-btn-secondary:hover {
+    background: var(--surface-sunken);
+    border-color: var(--border-strong);
+    color: var(--text-primary);
+  }
+  .t-btn-secondary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
   /* ── Labels ─────────────────────────────────────────── */
   .t-label {
     display: block;

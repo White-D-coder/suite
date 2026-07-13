@@ -1,12 +1,15 @@
-import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards } from '@nestjs/common';
 import { FinancialService } from './financial.service';
 import { CreateIncomeDto } from './dto/create-income.dto';
 import { CreateExpenseDto } from './dto/create-expense.dto';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { AdminGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 
 @Controller('finance')
-@UseGuards(AdminGuard)
+@UseGuards(AdminGuard, RolesGuard)
+@Roles('owner', 'admin', 'finance')
 export class FinancialController {
   constructor(private readonly financialService: FinancialService) {}
 
@@ -15,6 +18,7 @@ export class FinancialController {
     return this.financialService.getDashboardData();
   }
 
+  // Income
   @Get('income')
   async getIncome() {
     return this.financialService.findAllIncome();
@@ -25,6 +29,7 @@ export class FinancialController {
     return this.financialService.createIncome(createIncomeDto);
   }
 
+  // Expenses CRUD
   @Get('expenses')
   async getExpenses() {
     return this.financialService.findAllExpenses();
@@ -35,6 +40,22 @@ export class FinancialController {
     return this.financialService.createExpense(createExpenseDto);
   }
 
+  @Put('expenses/:id')
+  async updateExpense(@Param('id') id: string, @Body() body: any) {
+    return this.financialService.updateExpense(id, body);
+  }
+
+  @Delete('expenses/:id')
+  async removeExpense(@Param('id') id: string) {
+    return this.financialService.removeExpense(id);
+  }
+
+  @Post('expenses/:id/postpone')
+  async postponeExpense(@Param('id') id: string, @Body() body: any) {
+    return this.financialService.postponeExpense(id, body);
+  }
+
+  // Subscriptions
   @Get('subscriptions')
   async getSubscriptions() {
     return this.financialService.findAllSubscriptions();
@@ -48,5 +69,37 @@ export class FinancialController {
   @Post('subscriptions/:id/remind')
   async triggerReminder(@Param('id') id: string) {
     return this.financialService.sendSubscriptionReminder(id);
+  }
+
+  // Salaries CRUD
+  @Get('salaries')
+  async getSalaries() {
+    return this.financialService.findAllSalaries();
+  }
+
+  @Post('salaries')
+  async recordSalary(@Body() body: any) {
+    return this.financialService.createSalary(body);
+  }
+
+  @Put('salaries/:id')
+  async updateSalary(@Param('id') id: string, @Body() body: any) {
+    return this.financialService.updateSalary(id, body);
+  }
+
+  @Delete('salaries/:id')
+  async removeSalary(@Param('id') id: string) {
+    return this.financialService.removeSalary(id);
+  }
+
+  // Analyzers
+  @Get('analysers/financial')
+  async getFinancialAnalyser() {
+    return this.financialService.getFinancialAnalyser();
+  }
+
+  @Get('analysers/profitability')
+  async getProjectProfitability() {
+    return this.financialService.getProjectProfitability();
   }
 }

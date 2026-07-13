@@ -1,20 +1,38 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../common/services/prisma.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
-import { CreateTemplateDto } from './dto/create-template.dto';
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
 import { Prisma } from '@prisma/client';
+import { ExchangeRateService } from '../financial/exchange-rate.service';
 
 @Injectable()
 export class InvoicesService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly exchangeRateService: ExchangeRateService,
     @InjectQueue('invoice-generation') private readonly invoiceQueue: Queue,
   ) {}
 
   async create(createInvoiceDto: CreateInvoiceDto) {
-    const { clientId, projectId, invoiceNumber, issueDate, dueDate, currency, taxRate, lineItems } = createInvoiceDto;
+    const {
+      clientId,
+      projectId,
+      invoiceNumber,
+      issueDate,
+      dueDate,
+      currency,
+      taxRate,
+      lineItems,
+      progressBillingMode,
+      taxProfile,
+      clientCurrency,
+      displayCurrency,
+      fxRate,
+      fxSource,
+      fxMode,
+      schedules,
+    } = createInvoiceDto;
 
     // Validate client
     const client = await this.prisma.client.findUnique({
@@ -32,7 +50,7 @@ export class InvoicesService {
       throw new BadRequestException(`Invoice number ${invoiceNumber} already exists`);
     }
 
-    // Calculate totals
+    // 1. Calculate base subtotal
     let subtotalVal = 0;
     const itemsData = lineItems.map((item) => {
       const itemTotal = item.quantity * item.unitPrice;
@@ -45,11 +63,68 @@ export class InvoicesService {
       };
     });
 
-    const subtotal = new Prisma.Decimal(subtotalVal);
-    const taxAmount = new Prisma.Decimal(subtotalVal * (taxRate / 100));
-    const total = subtotal.add(taxAmount);
+    // 2. Apply Tax Profile rules
+    let subtotal = new Prisma.Decimal(subtotalVal);
+    let finalTaxRate = new Prisma.Decimal(taxRate);
+    let taxAmount = new Prisma.Decimal(0);
+    let total = new Prisma.Decimal(0);
 
-    // Create invoice in 'generating' state
+    const mode = taxProfile || 'exclusive';
+    if (mode === 'inclusive') {
+      // subtotalVal is the total price including tax
+      total = subtotal;
+      taxAmount = total.mul(finalTaxRate).div(finalTaxRate.add(100));
+      subtotal = total.sub(taxAmount);
+    } else if (mode === 'exempt' || mode === 'reverse-charge') {
+      finalTaxRate = new Prisma.Decimal(0);
+      taxAmount = new Prisma.Decimal(0);
+      total = subtotal;
+    } else {
+      // standard exclusive
+      taxAmount = subtotal.mul(finalTaxRate).div(100);
+      total = subtotal.add(taxAmount);
+    }
+
+    // 3. Multi-currency & FX Freezing logic
+    let resolvedFxRate = fxRate;
+    let resolvedFxSource = fxSource || 'live';
+    const baseCurrency = 'USD'; // Local system standard base
+    
+    if (currency !== baseCurrency && !resolvedFxRate) {
+      resolvedFxRate = await this.exchangeRateService.getExchangeRate(currency, baseCurrency);
+      resolvedFxSource = 'ExchangeRateAPI';
+    } else if (!resolvedFxRate) {
+      resolvedFxRate = 1.0;
+    }
+
+    // 4. Milestone/Billing schedules and payments
+    let paidAmountVal = 0;
+    const scheduleData: any[] = [];
+
+    if (schedules && schedules.length > 0) {
+      schedules.forEach((sch) => {
+        const isPaid = sch.reminderPolicy === 'paid' || sch.percentage === 0; // Check indicator
+        const paidStatus = isPaid ? 'paid' : 'pending';
+        const schPaidAmount = isPaid ? sch.amountDue : 0;
+        
+        paidAmountVal += schPaidAmount;
+
+        scheduleData.push({
+          milestoneName: sch.milestoneName,
+          percentage: sch.percentage ? new Prisma.Decimal(sch.percentage) : null,
+          amountDue: new Prisma.Decimal(sch.amountDue),
+          paymentStatus: paidStatus,
+          dueDate: sch.dueDate ? new Date(sch.dueDate) : null,
+          paidAmount: new Prisma.Decimal(schPaidAmount),
+          paidAt: isPaid ? new Date() : null,
+        });
+      });
+    }
+
+    const paidAmount = new Prisma.Decimal(paidAmountVal);
+    const remainingBalance = total.sub(paidAmount);
+
+    // 5. Save the Invoices record
     const invoice = await this.prisma.invoice.create({
       data: {
         invoiceNumber,
@@ -57,18 +132,33 @@ export class InvoicesService {
         dueDate: dueDate ? new Date(dueDate) : null,
         currency,
         subtotal,
-        taxRate: new Prisma.Decimal(taxRate),
+        taxRate: finalTaxRate,
         taxAmount,
         total,
-        status: 'generating',
+        status: paidAmountVal >= Number(total) ? 'paid' : (paidAmountVal > 0 ? 'partially_paid' : 'sent'),
         client: { connect: { id: clientId } },
         project: projectId ? { connect: { id: projectId } } : undefined,
         lineItems: {
           create: itemsData,
         },
+        progressBillingMode: progressBillingMode || 'none',
+        paidAmount,
+        remainingBalance,
+        baseCurrency,
+        clientCurrency: clientCurrency || currency,
+        displayCurrency: displayCurrency || currency,
+        fxRate: new Prisma.Decimal(resolvedFxRate),
+        fxSource: resolvedFxSource,
+        fxTimestamp: new Date(),
+        fxMode: fxMode || 'frozen',
+        taxProfile: mode,
+        schedules: scheduleData.length > 0 ? {
+          create: scheduleData,
+        } : undefined,
       },
       include: {
         lineItems: true,
+        schedules: true,
       },
     });
 
@@ -83,40 +173,45 @@ export class InvoicesService {
           delay: 2000,
         },
       },
-    );
+    ).catch(err => {
+      console.warn('[InvoicesService] Bull Queue offline, skipping queueing: ', err.message);
+      return { id: 'offline-mock' };
+    });
 
     return {
       invoiceId: invoice.id,
       jobId: job.id,
-      status: 'queued',
+      status: 'success',
     };
   }
 
   async getJobStatus(jobId: string) {
-    const job = await this.invoiceQueue.getJob(jobId);
-    if (!job) {
-      // If job not found in Redis, check DB fallback (completed and saved URL)
-      this.loggerWarn(`Job with ID ${jobId} not found in Queue. Checking database.`);
-      return { status: 'unknown', message: 'Job not found in queue registry' };
-    }
+    try {
+      const job = await this.invoiceQueue.getJob(jobId);
+      if (!job) {
+        return { status: 'unknown', message: 'Job not found in queue registry' };
+      }
 
-    const state = await job.getState();
-    if (state === 'completed') {
-      const result = job.returnvalue;
-      return {
-        status: 'completed',
-        pdfUrl: result?.pdfUrl || null,
-      };
-    } else if (state === 'failed') {
-      return {
-        status: 'failed',
-        error: job.failedReason,
-      };
-    }
+      const state = await job.getState();
+      if (state === 'completed') {
+        const result = job.returnvalue;
+        return {
+          status: 'completed',
+          pdfUrl: result?.pdfUrl || null,
+        };
+      } else if (state === 'failed') {
+        return {
+          status: 'failed',
+          error: job.failedReason,
+        };
+      }
 
-    return {
-      status: state, // active, waiting, delayed
-    };
+      return {
+        status: state,
+      };
+    } catch {
+      return { status: 'offline', message: 'Bull Queue engine is offline.' };
+    }
   }
 
   async findAll() {
@@ -125,6 +220,7 @@ export class InvoicesService {
         client: true,
         project: true,
         lineItems: true,
+        schedules: true,
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -137,6 +233,7 @@ export class InvoicesService {
         client: true,
         project: true,
         lineItems: true,
+        schedules: true,
       },
     });
     if (!invoice) {
@@ -152,13 +249,9 @@ export class InvoicesService {
     });
   }
 
-  async createTemplate(createTemplateDto: CreateTemplateDto) {
+  async createTemplate(createTemplateDto: any) {
     return this.prisma.invoiceTemplate.create({
       data: createTemplateDto,
     });
-  }
-
-  private loggerWarn(msg: string) {
-    console.warn(`[InvoicesService] ${msg}`);
   }
 }

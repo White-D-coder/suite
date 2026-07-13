@@ -1,7 +1,5 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Req, Ip, Headers } from '@nestjs/common';
 import { CredentialsService } from './credentials.service';
-import { CreateCredentialDto } from './dto/create-credential.dto';
-import { UpdateCredentialDto } from './dto/update-credential.dto';
 import { AdminGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('credentials')
@@ -9,29 +7,84 @@ import { AdminGuard } from '../auth/guards/jwt-auth.guard';
 export class CredentialsController {
   constructor(private readonly credentialsService: CredentialsService) {}
 
-  @Post()
-  async create(@Body() createCredentialDto: CreateCredentialDto) {
-    return this.credentialsService.create(createCredentialDto);
+  // Collections CRUD
+  @Post('collections')
+  async createCollection(@Body() body: any) {
+    return this.credentialsService.createCollection(body);
   }
 
-  @Get()
-  async findAll(@Query('decrypt') decrypt?: string) {
-    const shouldDecrypt = decrypt === 'true';
-    return this.credentialsService.findAll(shouldDecrypt);
+  @Get('collections')
+  async findAllCollections(@Req() req: any) {
+    return this.credentialsService.findAllCollections(req.user);
   }
 
-  @Get(':id')
-  async findOne(@Param('id') id: string) {
-    return this.credentialsService.findOne(id, true);
+  @Get('collections/:id')
+  async findOneCollection(@Param('id') id: string, @Req() req: any) {
+    return this.credentialsService.findOneCollection(id, req.user);
   }
 
-  @Put(':id')
-  async update(@Param('id') id: string, @Body() updateCredentialDto: UpdateCredentialDto) {
-    return this.credentialsService.update(id, updateCredentialDto);
+  // Secrets CRUD
+  @Post('collections/:id/secrets')
+  async addSecret(@Param('id') collectionId: string, @Body() body: any, @Req() req: any) {
+    return this.credentialsService.addSecret(collectionId, body, req.user);
   }
 
-  @Delete(':id')
-  async remove(@Param('id') id: string) {
-    return this.credentialsService.remove(id);
+  @Delete('secrets/:secretId')
+  async removeSecret(@Param('secretId') secretId: string, @Req() req: any) {
+    return this.credentialsService.removeSecret(secretId, req.user);
+  }
+
+  // Plaintext reveal (Audited & Re-authenticated)
+  @Post('secrets/:secretId/reveal')
+  async revealSecret(
+    @Param('secretId') secretId: string,
+    @Body() body: any,
+    @Req() req: any,
+    @Ip() ipAddress: string,
+    @Headers('user-agent') userAgent: string,
+  ) {
+    return this.credentialsService.revealSecret(secretId, body, req.user, ipAddress, userAgent);
+  }
+
+  // Access Requests
+  @Post('requests')
+  async createRequest(@Body() body: any, @Req() req: any) {
+    return this.credentialsService.createRequest(body, req.user);
+  }
+
+  @Get('requests')
+  async findAllRequests(@Req() req: any) {
+    return this.credentialsService.findAllRequests(req.user);
+  }
+
+  @Post('requests/:id/approve')
+  async approveRequest(@Param('id') id: string, @Req() req: any) {
+    return this.credentialsService.approveRequest(id, req.user);
+  }
+
+  @Post('requests/:id/reject')
+  async rejectRequest(@Param('id') id: string, @Req() req: any) {
+    return this.credentialsService.rejectRequest(id, req.user);
+  }
+
+  @Post('requests/:id/revoke')
+  async revokeRequest(@Param('id') id: string, @Req() req: any) {
+    return this.credentialsService.revokeRequest(id, req.user);
+  }
+
+  // Rotation Tasks (Pending Rotation Queue)
+  @Get('rotation-queue')
+  async getRotationQueue(@Req() req: any) {
+    return this.credentialsService.getRotationQueue(req.user);
+  }
+
+  @Post('rotation-tasks/:id/complete')
+  async completeRotation(@Param('id') id: string, @Body() body: any, @Req() req: any) {
+    return this.credentialsService.completeRotation(id, body, req.user);
+  }
+
+  @Post('rotation-tasks/:id/snooze')
+  async snoozeRotation(@Param('id') id: string, @Body() body: any, @Req() req: any) {
+    return this.credentialsService.snoozeRotation(id, body, req.user);
   }
 }

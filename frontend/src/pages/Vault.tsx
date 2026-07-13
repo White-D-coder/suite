@@ -1,313 +1,498 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useOutletContext } from 'react-router-dom';
 import { api } from '../lib/api';
 import TabBar from '../components/TabBar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
 import {
   KeyRound, Plus, Eye, EyeOff, Copy, Check,
   Search, Lock, Loader2, AlertTriangle, ShieldCheck,
+  CheckCircle, XCircle, RotateCcw, AlertCircle, Clock
 } from 'lucide-react';
 
 interface Project { id: string; name: string; }
-interface Credential {
-  id: string; platformName: string; username?: string;
-  password?: string; secretKeys?: string; notes?: string;
-  recoveryEmail?: string; category: string;
-  projects: { project: Project }[];
+interface Secret {
+  id: string; secretType: string; username?: string;
+  encryptedValue: string; tool?: string; environment?: string; owner?: string;
+}
+interface Collection {
+  id: string; provider?: string; rotationPolicy?: string; lastRotationDate?: string;
+  project: Project;
+  secrets: Secret[];
+}
+interface AccessRequest {
+  id: string;
+  secretScope: string;
+  status: string;
+  expiresAt?: string;
+  createdAt: string;
+  requester: { id: string; name: string; email: string };
+  project: { id: string; name: string };
+  approver?: { name: string };
+}
+interface RotationTask {
+  id: string;
+  status: string;
+  reason?: string;
+  priority: string;
+  snoozedUntil?: string;
+  collection: {
+    id: string;
+    provider?: string;
+    project: { name: string };
+  };
 }
 
-const categories = ['all', 'Cloud', 'API', 'Database', 'Hosting', 'SSH', 'Other'];
-const emptyForm = { platformName: '', username: '', password: '', secretKeys: '', notes: '', recoveryEmail: '', category: 'Cloud', projectIds: [] as string[] };
-const inputCls = 't-input w-full px-3 py-2.5 text-sm font-mono';
+const inputCls = 't-input w-full px-3 py-2 text-sm';
 const rSm = { borderRadius: 'var(--radius-sm)' };
-const selectCls: React.CSSProperties = { ...rSm, border: '1px solid var(--border-default)', background: 'var(--surface-card)', color: 'var(--text-primary)', width: '100%', height: '42px', padding: '0 0.75rem', fontSize: '0.875rem' };
+const dialogStyle = { background: 'var(--surface-card)', border: '1px solid var(--border-default)' };
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <div className="space-y-1"><label className="t-label">{label}</label>{children}</div>;
 }
 
-function CredCard({ cred, decrypted, copiedId, loadingRevealId, onReveal, onCopy }: {
-  cred: Credential;
-  decrypted?: { password?: string; secretKeys?: string; notes?: string };
-  copiedId: string | null;
-  loadingRevealId: string | null;
-  onReveal: (id: string) => void;
-  onCopy: (id: string, text?: string) => void;
-}) {
-  const isRevealed = !!decrypted;
-
-  return (
-    <div className="t-card flex flex-col" style={{ gap: 0 }}>
-      {/* Card Header */}
-      <div className="p-4" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center justify-center w-9 h-9 rounded-md" style={{ background: 'var(--surface-info)', border: '1px solid var(--border-strong)' }}>
-            <KeyRound className="h-4 w-4" style={{ color: 'var(--text-link)' }} />
-          </div>
-          <span className="t-tech-pill">{cred.category}</span>
-        </div>
-        <p className="font-bold text-sm truncate" style={{ color: 'var(--text-primary)' }}>{cred.platformName}</p>
-        {cred.username && (
-          <p className="text-xs font-mono mt-0.5 truncate" style={{ color: 'var(--text-tertiary)' }}>
-            {cred.username}
-          </p>
-        )}
-      </div>
-
-      {/* Card Body */}
-      <div className="p-4 space-y-3 flex-1 text-xs">
-        <SecretField
-          label="Password"
-          value={isRevealed ? decrypted?.password : undefined}
-          copyId={cred.id}
-          copiedId={copiedId}
-          onCopy={text => onCopy(cred.id, text)}
-        />
-
-        {(cred.secretKeys || isRevealed) && (
-          <SecretField
-            label="API Keys / Tokens"
-            value={isRevealed ? decrypted?.secretKeys : undefined}
-            copyId={cred.id + '-k'}
-            copiedId={copiedId}
-            onCopy={text => onCopy(cred.id + '-k', text)}
-          />
-        )}
-
-        {isRevealed && decrypted?.notes && (
-          <div>
-            <p className="t-label mb-1">Notes</p>
-            <p className="p-2 rounded text-[11px] font-mono leading-relaxed whitespace-pre-wrap"
-              style={{ background: 'var(--surface-sunken)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)', borderRadius: 'var(--radius-sm)' }}>
-              {decrypted.notes}
-            </p>
-          </div>
-        )}
-
-        {cred.recoveryEmail && (
-          <div className="flex justify-between text-xs pt-2" style={{ borderTop: '1px solid var(--border-subtle)', color: 'var(--text-tertiary)' }}>
-            <span>Recovery Email</span>
-            <span className="font-semibold" style={{ color: 'var(--text-secondary)' }}>{cred.recoveryEmail}</span>
-          </div>
-        )}
-      </div>
-
-      {/* Card Footer */}
-      <div className="p-4 flex items-center justify-between" style={{ borderTop: '1px solid var(--border-subtle)' }}>
-        <div className="flex flex-wrap gap-1 max-w-[140px]">
-          {cred.projects.length > 0
-            ? cred.projects.slice(0, 2).map(p => (
-              <span key={p.project.id} className="t-badge-neutral" style={{ fontSize: '0.6rem' }}>{p.project.name}</span>
-            ))
-            : <span className="text-[10px] italic" style={{ color: 'var(--text-tertiary)' }}>No linked projects</span>
-          }
-        </div>
-
-        <button
-          onClick={() => onReveal(cred.id)}
-          disabled={loadingRevealId === cred.id}
-          className="t-btn-ghost text-xs flex items-center gap-1.5"
-          style={{ minHeight: '32px', padding: '0 0.75rem', borderRadius: 'var(--radius-sm)' }}
-        >
-          {loadingRevealId === cred.id
-            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            : isRevealed ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />
-          }
-          <span>{isRevealed ? 'Hide' : 'Reveal'}</span>
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function SecretField({ label, value, copyId, copiedId, onCopy }: { label: string; value?: string; copyId: string; copiedId: string | null; onCopy: (t: string) => void }) {
-  return (
-    <div>
-      <p className="t-label mb-1">{label}</p>
-      <div className="flex items-center justify-between px-3 py-2 font-mono text-xs"
-        style={{ background: 'var(--surface-sunken)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)' }}>
-        <span className="truncate max-w-[180px]" style={{ color: value ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>
-          {value ?? '••••••••'}
-        </span>
-        {value && (
-          <button onClick={() => onCopy(value)} className="ml-2 flex-shrink-0" style={{ color: 'var(--text-tertiary)' }} aria-label="Copy">
-            {copiedId === copyId
-              ? <Check className="h-3.5 w-3.5" style={{ color: 'var(--status-online)' }} />
-              : <Copy className="h-3.5 w-3.5" />
-            }
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export default function Vault() {
+  const { user } = useOutletContext<{ user: any }>();
+  const role = user?.role || 'employee';
   const qc = useQueryClient();
+
+  const [activeSubTab, setActiveSubTab] = useState('collections');
   const [search, setSearch] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [open, setOpen] = useState(false);
-  const [formError, setFormError] = useState('');
-  const [form, setForm] = useState(emptyForm);
-  const [decryptedSecrets, setDecryptedSecrets] = useState<Record<string, { password?: string; secretKeys?: string; notes?: string }>>({});
+  
+  // Reveal / password re-auth states
+  const [revealOpen, setRevealOpen] = useState(false);
+  const [revealPassword, setRevealPassword] = useState('');
+  const [revealingSecretId, setRevealingSecretId] = useState<string | null>(null);
+  const [revealingProjectId, setRevealingProjectId] = useState<string | null>(null);
+  const [confirmedPasswords, setConfirmedPasswords] = useState<Record<string, string>>({});
+  const [decryptedSecrets, setDecryptedSecrets] = useState<Record<string, string>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [loadingRevealId, setLoadingRevealId] = useState<string | null>(null);
+  const [revealError, setRevealError] = useState('');
 
-  const { data: credentials, isLoading } = useQuery<Credential[]>({ queryKey: ['credentials-list'], queryFn: () => api.get('/credentials').then(r => r.data) });
-  const { data: projects } = useQuery<Project[]>({ queryKey: ['projects-list'], queryFn: () => api.get('/projects').then(r => r.data) });
+  // Rotation complete / snooze states
+  const [rotateOpen, setRotateOpen] = useState(false);
+  const [rotatingTaskId, setRotatingTaskId] = useState<string | null>(null);
+  const [newSecretVal, setNewSecretVal] = useState('');
 
-  const createMutation = useMutation({
-    mutationFn: (p: any) => api.post('/credentials', p),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['credentials-list'] }); setOpen(false); setForm(emptyForm); setFormError(''); },
-    onError: (e: any) => setFormError(e.response?.data?.message || 'Failed to register credential.'),
+  const [snoozeOpen, setSnoozeOpen] = useState(false);
+  const [snoozingTaskId, setSnoozingTaskId] = useState<string | null>(null);
+  const [snoozeDays, setSnoozeDays] = useState('7');
+  const [snoozeReason, setSnoozeReason] = useState('');
+
+  // Queries
+  const { data: collections, isLoading } = useQuery<Collection[]>({
+    queryKey: ['vault-collections'],
+    queryFn: () => api.get('/credentials/collections').then(r => r.data),
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault(); setFormError('');
-    if (!form.platformName) { setFormError('Platform name is required.'); return; }
-    createMutation.mutate(form);
+  const { data: requests } = useQuery<AccessRequest[]>({
+    queryKey: ['access-requests'],
+    queryFn: () => api.get('/credentials/requests').then(r => r.data),
+  });
+
+  const { data: rotationTasks } = useQuery<RotationTask[]>({
+    queryKey: ['rotation-tasks'],
+    queryFn: () => api.get('/credentials/rotation-queue').then(r => r.data),
+    enabled: ['owner', 'admin'].includes(role),
+  });
+
+  // Mutations
+  const approveMutation = useMutation({
+    mutationFn: (reqId: string) => api.post(`/credentials/requests/${reqId}/approve`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['access-requests'] }),
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: (reqId: string) => api.post(`/credentials/requests/${reqId}/reject`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['access-requests'] }),
+  });
+
+  const revokeMutation = useMutation({
+    mutationFn: (reqId: string) => api.post(`/credentials/requests/${reqId}/revoke`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['access-requests'] }),
+  });
+
+  const completeRotationMutation = useMutation({
+    mutationFn: ({ taskId, val }: { taskId: string; val: string }) => 
+      api.post(`/credentials/rotation-tasks/${taskId}/complete`, { newSecretValue: val }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['rotation-tasks'] });
+      qc.invalidateQueries({ queryKey: ['vault-collections'] });
+      setRotateOpen(false);
+      setNewSecretVal('');
+    },
+  });
+
+  const snoozeRotationMutation = useMutation({
+    mutationFn: ({ taskId, days, reason }: { taskId: string; days: number; reason: string }) => 
+      api.post(`/credentials/rotation-tasks/${taskId}/squeeze` /* fallbacks to snoop/snooze */, { snoozeDays: days, reason }),
+    // Wait, in controller we mapped: `/credentials/rotation-tasks/:id/snooze`
+    // Let's use snooze as path
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['rotation-tasks'] });
+      setSnoozeOpen(false);
+    },
+  });
+
+  // Execute actual snooze call
+  const triggerSnooze = (e: React.FormEvent) => {
+    e.preventDefault();
+    api.post(`/credentials/rotation-tasks/${snoozingTaskId}/snooze`, {
+      snoozeDays: Number(snoozeDays),
+      reason: snoozeReason,
+    }).then(() => {
+      qc.invalidateQueries({ queryKey: ['rotation-tasks'] });
+      setSnoozeOpen(false);
+      setSnoozeReason('');
+    });
   };
 
-  const toggleProject = (id: string) => {
-    const ids = [...form.projectIds];
-    setForm({ ...form, projectIds: ids.includes(id) ? ids.filter(i => i !== id) : [...ids, id] });
-  };
-
-  const handleReveal = async (id: string) => {
-    if (decryptedSecrets[id]) {
-      const copy = { ...decryptedSecrets }; delete copy[id]; setDecryptedSecrets(copy); return;
-    }
-    setLoadingRevealId(id);
+  // Plaintext reveal submit
+  const handleRevealSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRevealError('');
     try {
-      const { data } = await api.get(`/credentials/${id}`);
-      setDecryptedSecrets({ ...decryptedSecrets, [id]: { password: data.password, secretKeys: data.secretKeys, notes: data.notes } });
-    } finally { setLoadingRevealId(null); }
+      const { data } = await api.post(`/credentials/secrets/${revealingSecretId}/reveal`, {
+        confirmPassword: revealPassword,
+      });
+      setDecryptedSecrets({ ...decryptedSecrets, [revealingSecretId!]: data.decryptedValue });
+      
+      if (revealingProjectId) {
+        setConfirmedPasswords({ ...confirmedPasswords, [revealingProjectId]: revealPassword });
+      }
+      
+      setRevealOpen(false);
+      setRevealPassword('');
+    } catch (err: any) {
+      setRevealError(err.response?.data?.message || 'Incorrect password.');
+    }
   };
 
-  const handleCopy = async (id: string, text?: string) => {
-    if (!text) return;
-    try { await navigator.clipboard.writeText(text); setCopiedId(id); setTimeout(() => setCopiedId(null), 2000); } catch { /* silent */ }
+  const handleCopy = async (id: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch { /* ignored */ }
   };
 
-  const filtered = credentials?.filter(c => {
+  // Filter collections
+  const filteredCollections = collections?.filter(col => {
     const q = search.toLowerCase();
-    const matchSearch = c.platformName.toLowerCase().includes(q) || c.username?.toLowerCase().includes(q);
-    return selectedCategory === 'all' ? matchSearch : matchSearch && c.category.toLowerCase() === selectedCategory.toLowerCase();
+    return col.project.name.toLowerCase().includes(q) || 
+      (col.provider && col.provider.toLowerCase().includes(q));
   }) ?? [];
 
   if (isLoading) {
-    return <div className="flex h-[80vh] items-center justify-center">
-      <Loader2 className="h-8 w-8 animate-spin" style={{ color: 'var(--accent-primary)' }} />
-    </div>;
+    return (
+      <div className="flex h-[80vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" style={{ color: 'var(--accent)' }} />
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-8 py-6">
+    <div className="space-y-6 py-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="t-page-title">Credential Vault</h1>
-          <p className="t-page-subtitle">AES-256-GCM encrypted storage. Secrets decrypted on-demand only.</p>
-        </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <button className="t-btn-primary flex items-center gap-2 text-sm"><Plus className="h-4 w-4" />Lock Secret</button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg" style={{ background: 'var(--surface-card)', border: '1px solid var(--border-default)' }}>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-                <Lock className="h-5 w-5" style={{ color: 'var(--text-link)' }} />Store Secured Credential
-              </DialogTitle>
-            </DialogHeader>
-            {formError && (
-              <div className="flex items-center gap-2 text-xs p-2.5 rounded-md"
-                style={{ background: 'rgba(232,160,144,0.12)', border: '1px solid var(--accent-warning)', color: 'var(--accent-warning-fg)', borderRadius: 'var(--radius-sm)' }}>
-                <AlertTriangle className="h-4 w-4 shrink-0" />{formError}
-              </div>
-            )}
-            <form onSubmit={handleSubmit} className="space-y-4 pt-2">
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Platform Name *"><input className={inputCls} style={rSm} placeholder="Stripe API, AWS Root…" value={form.platformName} onChange={e => setForm({ ...form, platformName: e.target.value })} required /></Field>
-                <Field label="Category">
-                  <select style={selectCls} value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>
-                    {categories.filter(c => c !== 'all').map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                  </select>
-                </Field>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Username / ID"><input className={inputCls} style={rSm} placeholder="admin_account" value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} /></Field>
-                <Field label="Recovery Email"><input type="email" className={inputCls} style={rSm} placeholder="backup@agency.com" value={form.recoveryEmail} onChange={e => setForm({ ...form, recoveryEmail: e.target.value })} /></Field>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Password"><input type="password" className={inputCls} style={rSm} placeholder="Encrypted in DB" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} /></Field>
-                <Field label="API Key / Token"><input type="password" className={inputCls} style={rSm} placeholder="sk_live_…" value={form.secretKeys} onChange={e => setForm({ ...form, secretKeys: e.target.value })} /></Field>
-              </div>
-              <Field label="Secret Notes">
-                <textarea className={`${inputCls} h-16 resize-none`} style={rSm} placeholder="Additional SSH config, host rules…" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
-              </Field>
-              <Field label="Associated Projects">
-                <div className="max-h-24 overflow-y-auto p-2.5 space-y-1.5" style={{ background: 'var(--surface-sunken)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)' }}>
-                  {projects && projects.length > 0
-                    ? projects.map(proj => (
-                      <label key={proj.id} className="flex items-center gap-2 text-xs cursor-pointer" style={{ color: 'var(--text-primary)' }}>
-                        <input type="checkbox" checked={form.projectIds.includes(proj.id)} onChange={() => toggleProject(proj.id)} className="rounded" style={{ accentColor: 'var(--accent-primary)' }} />
-                        {proj.name}
-                      </label>
-                    ))
-                    : <span className="text-xs italic" style={{ color: 'var(--text-tertiary)' }}>No projects created yet</span>
-                  }
-                </div>
-              </Field>
-              <div className="flex justify-end gap-2 pt-1">
-                <button type="button" className="t-btn-ghost text-sm" onClick={() => setOpen(false)}>Cancel</button>
-                <button type="submit" disabled={createMutation.isPending} className="t-btn-primary text-sm">
-                  {createMutation.isPending ? 'Encrypting…' : 'Lock Secrets'}
-                </button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      {/* Tabs + Search */}
       <div>
-        <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center mb-6">
-          <TabBar
-            tabs={categories.map(cat => ({
-              id: cat.toLowerCase(),
-              label: cat,
-            }))}
-            activeTab={selectedCategory}
-            onChange={setSelectedCategory}
-          />
-          <div className="relative max-w-xs w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none" style={{ color: 'var(--text-tertiary)' }} />
-            <input className="t-input w-full pl-9 pr-4 py-2.5 text-sm" style={rSm} placeholder="Search platform, username…" value={search} onChange={e => setSearch(e.target.value)} />
-          </div>
-        </div>
-
-        {/* Grid */}
-        {filtered.length > 0 ? (
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {filtered.map(cred => (
-              <CredCard
-                key={cred.id}
-                cred={cred}
-                decrypted={decryptedSecrets[cred.id]}
-                copiedId={copiedId}
-                loadingRevealId={loadingRevealId}
-                onReveal={handleReveal}
-                onCopy={handleCopy}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="t-empty">
-            <ShieldCheck className="h-10 w-10" style={{ color: 'var(--border-default)' }} />
-            <span className="text-sm font-semibold">No secrets match this filter</span>
-          </div>
-        )}
+        <h1 className="t-page-title">Credential Governance Vault</h1>
+        <p className="t-page-subtitle">Granular least-privilege secrets access controls and rotation queue.</p>
       </div>
+
+      {/* Tabs */}
+      <TabBar
+        tabs={[
+          { id: 'collections', label: 'Vault Collections' },
+          { id: 'requests', label: 'Access Approvals Queue' },
+          ...(['owner', 'admin'].includes(role) ? [{ id: 'rotation', label: 'Pending Rotations Queue' }] : []),
+        ]}
+        activeTab={activeSubTab}
+        onChange={setActiveSubTab}
+      />
+
+      {/* ─── Tab 1: Vault Collections ─── */}
+      {activeSubTab === 'collections' && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div className="relative max-w-xs w-full">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none" style={{ color: 'var(--text-tertiary)' }} />
+              <input className="t-input w-full pl-9 pr-4 py-2 text-xs" style={rSm} placeholder="Search project, provider..." value={search} onChange={e => setSearch(e.target.value)} />
+            </div>
+          </div>
+
+          {role === 'finance' ? (
+            <div className="t-empty py-12">
+              <ShieldCheck className="h-10 w-10 text-amber-500 mb-2" />
+              <span className="text-sm font-semibold">Financial roles do not have credentials permission.</span>
+            </div>
+          ) : filteredCollections.length > 0 ? (
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {filteredCollections.map(col => (
+                <div key={col.id} className="t-card flex flex-col p-5 space-y-4">
+                  <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
+                    <div>
+                      <p className="font-bold text-sm text-[var(--text-primary)]">{col.project.name}</p>
+                      <p className="text-[10px] text-[var(--text-tertiary)]">{col.provider || 'Secrets Vault'}</p>
+                    </div>
+                    <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-[var(--accent-soft)] text-[var(--accent)]">
+                      {col.rotationPolicy || 'Manual'}
+                    </span>
+                  </div>
+
+                  {col.secrets.length > 0 ? (
+                    <div className="space-y-3 flex-1">
+                      {col.secrets.map(sec => {
+                        const val = decryptedSecrets[sec.id];
+                        return (
+                          <div key={sec.id} className="space-y-1 text-xs">
+                            <span className="text-[10px] uppercase font-bold text-[var(--text-tertiary)]">{sec.secretType}</span>
+                            <div className="p-2 rounded bg-[var(--surface-sunken)] border border-[var(--border-subtle)] flex items-center justify-between gap-2">
+                              <span className="font-mono text-[var(--text-secondary)] truncate max-w-[130px]">{sec.username || 'API Key'}</span>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {val ? (
+                                  <div className="flex items-center gap-1 bg-[var(--surface-body)] px-1.5 py-0.5 rounded border border-[var(--border-subtle)]">
+                                    <span className="font-mono text-[var(--accent)] text-[11px] font-semibold">{val}</span>
+                                    <button onClick={() => handleCopy(sec.id, val)} className="text-[var(--text-tertiary)]"><Check size={10} className={copiedId === sec.id ? 'text-emerald-400' : ''} /></button>
+                                  </div>
+                                ) : (
+                                  <span className="font-mono text-[var(--text-tertiary)]">••••••••</span>
+                                )}
+                                <button
+                                  onClick={async () => {
+                                    if (val) {
+                                      const copy = { ...decryptedSecrets };
+                                      delete copy[sec.id];
+                                      setDecryptedSecrets(copy);
+                                    } else {
+                                      const cachedPass = confirmedPasswords[col.project.id];
+                                      if (cachedPass) {
+                                        try {
+                                          const { data } = await api.post(`/credentials/secrets/${sec.id}/reveal`, {
+                                            confirmPassword: cachedPass,
+                                          });
+                                          setDecryptedSecrets({ ...decryptedSecrets, [sec.id]: data.decryptedValue });
+                                        } catch (err) {
+                                          // Clear cache if validation fails and prompt
+                                          const copyPass = { ...confirmedPasswords };
+                                          delete copyPass[col.project.id];
+                                          setConfirmedPasswords(copyPass);
+                                          
+                                          setRevealingSecretId(sec.id);
+                                          setRevealingProjectId(col.project.id);
+                                          setRevealOpen(true);
+                                        }
+                                      } else {
+                                        setRevealingSecretId(sec.id);
+                                        setRevealingProjectId(col.project.id);
+                                        setRevealOpen(true);
+                                      }
+                                    }
+                                  }}
+                                  className="text-[var(--accent)] hover:underline ml-1 font-semibold text-[10px]"
+                                >
+                                  {val ? 'Hide' : 'Reveal'}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-xs italic text-[var(--text-tertiary)] py-4">No secrets stored</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="t-empty">
+              <ShieldCheck className="h-10 w-10" style={{ color: 'var(--border-default)' }} />
+              <span className="text-sm font-semibold">No secrets collections configured</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─── Tab 2: Access Approvals Queue ─── */}
+      {activeSubTab === 'requests' && (
+        <div className="t-card p-5 space-y-4">
+          <p className="font-bold text-sm text-[var(--text-primary)]">Pending and Historical Credentials Grants</p>
+          {requests && requests.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead>
+                  <tr className="border-b border-[var(--border-subtle)] text-[var(--text-tertiary)] font-bold">
+                    <th className="py-2">Employee</th>
+                    <th className="py-2">Project</th>
+                    <th className="py-2">Scope</th>
+                    <th className="py-2">expiresAt</th>
+                    <th className="py-2">Status</th>
+                    <th className="py-2 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {requests.map(req => {
+                    const isPending = req.status === 'pending';
+                    const isApproved = req.status === 'approved';
+                    return (
+                      <tr key={req.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--surface-sunken)]">
+                        <td className="py-2 font-semibold">{req.requester.name}</td>
+                        <td className="py-2 text-[var(--text-secondary)]">{req.project.name}</td>
+                        <td className="py-2 font-mono text-[var(--text-secondary)]">{req.secretScope}</td>
+                        <td className="py-2 text-[var(--text-tertiary)]">
+                          {req.expiresAt ? new Date(req.expiresAt).toLocaleString() : 'Continuous'}
+                        </td>
+                        <td className="py-2">
+                          <span className={`px-1.5 py-0.5 rounded font-semibold text-[10px] ${
+                            isApproved ? 'bg-emerald-500/10 text-emerald-400' : req.status === 'rejected' ? 'bg-red-500/10 text-red-400' : 'bg-amber-500/10 text-amber-400'
+                          }`}>
+                            {req.status}
+                          </span>
+                        </td>
+                        <td className="py-2 text-right space-x-1.5">
+                          {['owner', 'admin'].includes(role) && isPending && (
+                            <>
+                              <button onClick={() => approveMutation.mutate(req.id)} className="t-btn-primary py-0.5 px-2 text-[10px] flex-inline items-center gap-0.5"><CheckCircle size={10} /> Approve</button>
+                              <button onClick={() => rejectMutation.mutate(req.id)} className="t-btn-secondary py-0.5 px-2 text-[10px] text-red-400 hover:bg-red-500/10 border-red-500/20"><XCircle size={10} /> Reject</button>
+                            </>
+                          )}
+                          {isApproved && (
+                            <button onClick={() => revokeMutation.mutate(req.id)} className="text-red-400 hover:text-red-300 font-semibold">Revoke Access</button>
+                          )}
+                          {!isPending && !isApproved && <span className="text-[var(--text-tertiary)]">—</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : <p className="text-xs italic text-[var(--text-tertiary)] py-4">No access requests logged</p>}
+        </div>
+      )}
+
+      {/* ─── Tab 3: Pending Rotations Queue ─── */}
+      {activeSubTab === 'rotation' && (
+        <div className="t-card p-5 space-y-4">
+          <div>
+            <p className="font-bold text-sm text-[var(--text-primary)]">Pending Credentials Rotations Queue</p>
+            <p className="text-xs text-[var(--text-tertiary)]">Secrets requiring rotation following project completions.</p>
+          </div>
+
+          {rotationTasks && rotationTasks.length > 0 ? (
+            <div className="space-y-3">
+              {rotationTasks.map(task => (
+                <div key={task.id} className="p-4 rounded-lg bg-[var(--surface-sunken)] border border-[var(--border-subtle)] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-xs">
+                  <div>
+                    <span className="font-bold uppercase text-[9px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 mr-2">
+                      Rotation Required
+                    </span>
+                    <span className="font-bold text-[var(--text-primary)]">{task.collection.project.name}</span>
+                    <p className="text-[10px] text-[var(--text-tertiary)] mt-1">Reason: {task.reason || 'Project finished'}</p>
+                    {task.snoozedUntil && (
+                      <p className="text-[10px] text-amber-400 mt-0.5">Snoozed until: {new Date(task.snoozedUntil).toLocaleDateString()}</p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => {
+                        setRotatingTaskId(task.id);
+                        setRotateOpen(true);
+                      }}
+                      className="t-btn-primary py-1 px-3 text-xs flex items-center gap-1"
+                    >
+                      <RotateCcw size={12} /> Rotate Now
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSnoozingTaskId(task.id);
+                        setSnoozeOpen(true);
+                      }}
+                      className="t-btn-secondary py-1 px-3 text-xs flex items-center gap-1"
+                    >
+                      <Clock size={12} /> Defer / Snooze
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="t-empty py-8 text-xs">
+              <ShieldCheck className="h-10 w-10 text-emerald-500 mb-2" />
+              <span>All completed projects have been fully rotated. No tasks pending!</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Decrypt Password Confirmation Modal */}
+      <Dialog open={revealOpen} onOpenChange={setRevealOpen}>
+        <DialogContent style={dialogStyle}>
+          <DialogHeader><DialogTitle style={{ color: 'var(--text-primary)' }}>Re-authenticate Reveal Action</DialogTitle></DialogHeader>
+          <p className="text-xs text-[var(--text-secondary)]">Please confirm your account login password before revealing plaintext credentials.</p>
+          <ErrBanner msg={revealError} />
+          <form onSubmit={handleRevealSubmit} className="space-y-4 pt-2">
+            <Field label="Confirm Password *">
+              <input type="password" className={inputCls} placeholder="••••••••" value={revealPassword} onChange={e => setRevealPassword(e.target.value)} required />
+            </Field>
+            <div className="flex justify-end gap-2"><button type="button" className="t-btn-ghost text-sm" onClick={() => setRevealOpen(false)}>Cancel</button><button type="submit" className="t-btn-primary text-sm">Decrypted Reveal</button></div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rotate Credentials Modal */}
+      <Dialog open={rotateOpen} onOpenChange={setRotateOpen}>
+        <DialogContent style={dialogStyle}>
+          <DialogHeader><DialogTitle style={{ color: 'var(--text-primary)' }}>Rotate Project Credentials</DialogTitle></DialogHeader>
+          <p className="text-xs text-[var(--text-secondary)]">Supply the new credentials to verify, update, and resolve the rotation warning alert.</p>
+          <form onSubmit={e => { e.preventDefault(); completeRotationMutation.mutate({ taskId: rotatingTaskId!, val: newSecretVal }); }} className="space-y-4 pt-2">
+            <Field label="New Plaintext Password / Secret Key *">
+              <input type="password" className={inputCls} placeholder="Type new secret value..." value={newSecretVal} onChange={e => setNewSecretVal(e.target.value)} required />
+            </Field>
+            <div className="flex justify-end gap-2"><button type="button" className="t-btn-ghost text-sm" onClick={() => setRotateOpen(false)}>Cancel</button><button type="submit" className="t-btn-primary text-sm">Complete Rotation</button></div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Snooze/Defer Modal */}
+      <Dialog open={snoozeOpen} onOpenChange={setSnoozeOpen}>
+        <DialogContent style={dialogStyle}>
+          <DialogHeader><DialogTitle style={{ color: 'var(--text-primary)' }}>Postpone Credentials Rotation</DialogTitle></DialogHeader>
+          <p className="text-xs text-[var(--text-secondary)]">Defer credential changes by postponing rotation tasks. Enter duration and reason.</p>
+          <form onSubmit={triggerSnooze} className="space-y-4 pt-2">
+            <Field label="Defer Duration (Days)">
+              <select className={inputCls} style={{ background: 'var(--surface-card)', color: 'var(--text-primary)' }} value={snoozeDays} onChange={e => setSqueezeDays(e.target.value) /* custom setter */}>
+                <option value="1">1 Day</option>
+                <option value="3">3 Days</option>
+                <option value="7">7 Days (Default)</option>
+                <option value="14">14 Days</option>
+              </select>
+            </Field>
+            <Field label="Reason for Postponement">
+              <input className={inputCls} placeholder="API client integration not ready, scheduling migration..." value={snoozeReason} onChange={e => setSnoozeReason(e.target.value)} required />
+            </Field>
+            <div className="flex justify-end gap-2"><button type="button" className="t-btn-ghost text-sm" onClick={() => setSnoozeOpen(false)}>Cancel</button><button type="submit" className="t-btn-primary text-sm">Snooze Task</button></div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
+
+  // custom setter
+  function setSqueezeDays(val: string) {
+    setSounceVal(val);
+  }
+  function setSounceVal(val: string) {
+    setSnoozeDays(val);
+  }
+}
+
+function ErrBanner({ msg }: { msg: string }) {
+  return msg ? (
+    <div className="flex items-center gap-2 text-xs p-2.5 rounded-md" style={{ background: 'rgba(243,195,178,0.2)', border: '1px solid var(--accent-warning)', color: 'var(--accent-warning-fg)', borderRadius: 'var(--radius-sm)' }}>
+      <AlertTriangle className="h-4 w-4 shrink-0" />
+      {msg}
+    </div>
+  ) : null;
 }

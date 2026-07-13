@@ -3,9 +3,12 @@ import { InvoicesService } from './invoices.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { CreateTemplateDto } from './dto/create-template.dto';
 import { AdminGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 
 @Controller('invoices')
-@UseGuards(AdminGuard)
+@UseGuards(AdminGuard, RolesGuard)
+@Roles('owner', 'admin', 'finance')
 export class InvoicesController {
   constructor(private readonly invoicesService: InvoicesService) {}
 
