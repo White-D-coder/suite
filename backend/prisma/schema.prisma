@@ -7,18 +7,27 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Admin {
+model User {
   id           String          @id @default(uuid())
   email        String          @unique
   passwordHash String
+  name         String          @default("Internal User")
+  role         String          @default("employee") // "owner" | "admin" | "employee" | "finance"
   createdAt    DateTime        @default(now())
   company      CompanySetting?
+  
+  // Relations
+  assignments      ProjectAssignment[]
+  accessRequests   AccessRequest[]     @relation("requester")
+  approvedRequests AccessRequest[]     @relation("approver")
+  salaries         SalaryRecord[]
+  auditLogs        AuditLog[]
 }
 
 model CompanySetting {
   id            String   @id @default(uuid())
-  adminId       String   @unique
-  admin         Admin    @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   companyName   String?
   currency      String   @default("USD")
   invoicePrefix String   @default("INV-")
@@ -41,15 +50,44 @@ model Client {
   invoices       Invoice[]
   income         Income[]
   communications Communication[]
+  contacts       ClientContact[]
+}
+
+model ClientContact {
+  id                  String          @id @default(uuid())
+  clientId            String
+  client              Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  name                String
+  role                String          // e.g., "decision maker", "finance contact", "technical contact", "escalation contact"
+  email               String?
+  primaryNumber       String?
+  relationshipLabel   String?
+  isPrimary           Boolean         @default(false)
+  preferredForBilling Boolean         @default(false)
+  preferredForUrgent  Boolean         @default(false)
+  timeZone            String          @default("UTC")
+  consentStatus       String          @default("granted")
+  createdAt           DateTime        @default(now())
+  channels            ContactChannel[]
+}
+
+model ContactChannel {
+  id              String        @id @default(uuid())
+  contactId       String
+  contact         ClientContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  phoneType       String        // "primary phone", "alternate phone", "WhatsApp", "emergency", "escalation"
+  numberOrAddress String
+  isPreferred     Boolean       @default(false)
+  createdAt       DateTime      @default(now())
 }
 
 model Project {
-  id                 String              @id @default(uuid())
+  id                 String                    @id @default(uuid())
   clientId           String
-  client             Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client             Client                    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   name               String
   description        String?
-  status             String              @default("active")
+  status             String                    @default("active") // "active" | "completed_pending_rotation" | "rotated" | "closed"
   startDate          DateTime?
   deadline           DateTime?
   githubRepoUrl      String?
@@ -59,47 +97,177 @@ model Project {
   hostingPlatform    String?
   databasePlatform   String?
   deploymentPlatform String?
-  createdAt          DateTime            @default(now())
-  credentials        ProjectCredential[]
-  tasks              Task[]
-  websiteMonitors    WebsiteMonitor[]
-  invoices           Invoice[]
-  income             Income[]
-  communications     Communication[]
+  createdAt          DateTime                  @default(now())
+  
+  // Custom operational filters & location metrics
+  country            String?
+  state              String?
+  projectCategory    String?                   // "AI" | "web" | "mobile" | "automation" | "marketing"
+  serviceType        String?                   // "development" | "consulting" | "maintenance"
+  contractStatus     String                    @default("active") // "active" | "inactive"
+  progressStatus     String                    @default("scoping") // "scoping" | "in_progress" | "completed" | "on_hold"
+  currency           String                    @default("USD")
+
+  // Relations
+  tasks                 Task[]
+  websiteMonitors       WebsiteMonitor[]
+  invoices              Invoice[]
+  income                Income[]
+  communications        Communication[]
+  assignments           ProjectAssignment[]
+  vaultCollections      VaultCollection[]
+  accessRequests        AccessRequest[]
+  contracts             ProjectContract[]
+  accounts              ProjectAccount[]
+  tools                 ProjectToolSubscription[]
+  progressUpdates       ProjectProgressUpdate[]
+  environments          ProjectEnvironment[]
+  profitabilitySnapshot ProfitabilitySnapshot?
+  expenses              Expense[]
 }
 
-model Credential {
-  id                  String              @id @default(uuid())
-  platformName        String
-  username            String?
-  encryptedPassword   String?
-  encryptedSecretKeys String?
-  encryptedNotes      String?
-  recoveryEmail       String?
-  category            String
-  createdAt           DateTime            @default(now())
-  projects            ProjectCredential[]
+model ProjectContract {
+  id             String    @id @default(uuid())
+  projectId      String
+  project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title          String
+  contractStatus String    @default("active") // "active" | "expired" | "terminated"
+  startDate      DateTime
+  endDate        DateTime?
+  billingModel   String    // "time_and_materials" | "fixed_price" | "retainer"
+  fileUrl        String?
+  createdAt      DateTime  @default(now())
 }
 
-model ProjectCredential {
+model ProjectAccount {
+  id        String   @id @default(uuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  provider  String   // e.g. "Vercel", "AWS", "GitHub"
+  username  String
+  env       String   // "development" | "staging" | "production"
+  createdAt DateTime @default(now())
+}
+
+model ProjectToolSubscription {
+  id           String   @id @default(uuid())
   projectId    String
-  project      Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  credentialId String
-  credential   Credential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
-  @@id([projectId, credentialId])
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  vendor       String   // e.g., "Sentry", "LogRocket"
+  cost         Decimal  @db.Decimal(12, 2)
+  billingCycle String   // "monthly" | "yearly"
+  renewalDate  DateTime
+  createdAt    DateTime @default(now())
 }
 
-model Task {
+model ProjectProgressUpdate {
   id         String   @id @default(uuid())
   projectId  String
   project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  updaterId  String
+  updateText String   @db.Text
+  progress   Int      @default(0)
+  createdAt  DateTime @default(now())
+}
+
+model ProjectEnvironment {
+  id        String   @id @default(uuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String   // "development" | "staging" | "production"
+  url       String?
+  createdAt DateTime @default(now())
+}
+
+model ProjectAssignment {
+  id               String    @id @default(uuid())
+  employeeId       String
+  employee         User      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  projectId        String
+  project          Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  roleOnProject    String?
+  accessLevel      String    @default("view") // "view" | "edit" | "admin"
+  startDate        DateTime  @default(now())
+  dueDate          DateTime?
+  extendedTo       DateTime?
+  extensionHistory String[]
+  createdAt        DateTime  @default(now())
+}
+
+model VaultCollection {
+  id               String         @id @default(uuid())
+  projectId        String
+  project          Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  provider         String?        // e.g. "AWS Secrets Manager", "1Password"
+  rotationPolicy   String?        // e.g. "every 90 days"
+  lastRotationDate DateTime?
+  createdAt        DateTime       @default(now())
+  secrets          VaultSecret[]
+  rotationTasks    RotationTask[]
+}
+
+model VaultSecret {
+  id             String               @id @default(uuid())
+  collectionId   String
+  collection     VaultCollection      @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  secretType     String               // "password" | "api_key" | "ssh_key"
+  username       String?
+  encryptedValue String               // Encrypted text
+  tool           String?              // e.g. "GitHub", "Vercel"
+  environment    String?              // "development" | "staging" | "production"
+  owner          String?
+  revealPolicy   String               @default("owner_admin_approved")
+  createdAt      DateTime             @default(now())
+  versions       VaultSecretVersion[]
+}
+
+model VaultSecretVersion {
+  id             String      @id @default(uuid())
+  secretId       String
+  secret         VaultSecret @relation(fields: [secretId], references: [id], onDelete: Cascade)
+  version        Int
+  encryptedValue String
+  createdAt      DateTime    @default(now())
+}
+
+model AccessRequest {
+  id                String    @id @default(uuid())
+  requesterId       String
+  requester         User      @relation("requester", fields: [requesterId], references: [id], onDelete: Cascade)
+  projectId         String
+  project           Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  secretScope       String    // "collection" | "secret:id"
+  status            String    @default("pending") // "pending" | "approved" | "rejected" | "expired" | "revoked"
+  approverId        String?
+  approver          User?     @relation("approver", fields: [approverId], references: [id])
+  approvalTimestamp DateTime?
+  expiresAt         DateTime?
+  createdAt         DateTime  @default(now())
+}
+
+model RotationTask {
+  id           String          @id @default(uuid())
+  collectionId String
+  collection   VaultCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  status       String          @default("pending") // "pending" | "snoozed" | "completed" | "failed"
+  snoozedUntil DateTime?
+  reason       String?
+  priority     String          @default("medium") // "high" | "medium" | "low"
+  escalated    Boolean         @default(false)
+  createdAt    DateTime        @default(now())
+}
+
+model Task {
+  id         String    @id @default(uuid())
+  projectId  String
+  project    Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   name       String
   assignedTo String?
   deadline   DateTime?
-  progress   Int      @default(0)
-  status     String   @default("pending")
+  progress   Int       @default(0)
+  status     String    @default("pending")
   comments   String?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime  @default(now())
 }
 
 model Communication {
@@ -123,24 +291,53 @@ model InvoiceTemplate {
 }
 
 model Invoice {
-  id            String            @id @default(uuid())
-  clientId      String
-  client        Client            @relation(fields: [clientId], references: [id])
-  projectId     String?
-  project       Project?          @relation(fields: [projectId], references: [id])
-  invoiceNumber String            @unique
-  issueDate     DateTime
-  dueDate       DateTime?
-  currency      String
-  subtotal      Decimal           @db.Decimal(12, 2)
-  taxRate       Decimal           @db.Decimal(5, 2)
-  taxAmount     Decimal           @db.Decimal(12, 2)
-  total         Decimal           @db.Decimal(12, 2)
-  status        String            @default("draft")
-  pdfUrl        String?
-  createdAt     DateTime          @default(now())
-  lineItems     InvoiceLineItem[]
-  income        Income[]
+  id                  String            @id @default(uuid())
+  clientId            String
+  client              Client            @relation(fields: [clientId], references: [id])
+  projectId           String?
+  project             Project?          @relation(fields: [projectId], references: [id])
+  invoiceNumber       String            @unique
+  issueDate           DateTime
+  dueDate             DateTime?
+  currency            String
+  subtotal            Decimal           @db.Decimal(12, 2)
+  taxRate             Decimal           @db.Decimal(5, 2)
+  taxAmount           Decimal           @db.Decimal(12, 2)
+  total               Decimal           @db.Decimal(12, 2)
+  status              String            @default("draft")
+  pdfUrl              String?
+  createdAt           DateTime          @default(now())
+  lineItems           InvoiceLineItem[]
+  income              Income[]
+  schedules           InvoiceSchedule[]
+
+  // Multi-currency operational rules & taxes
+  progressBillingMode String?           // "percentage" | "fixed" | "none"
+  paidAmount          Decimal           @default(0.00) @db.Decimal(12, 2)
+  remainingBalance    Decimal           @default(0.00) @db.Decimal(12, 2)
+  baseCurrency        String            @default("USD")
+  clientCurrency      String?
+  displayCurrency     String?
+  fxRate              Decimal?          @db.Decimal(10, 4)
+  fxSource            String?
+  fxTimestamp         DateTime?
+  fxMode              String            @default("frozen") // "live" | "frozen"
+  taxProfile          String?           // e.g. "inclusive" | "exclusive" | "exempt"
+}
+
+model InvoiceSchedule {
+  id             String    @id @default(uuid())
+  invoiceId      String
+  invoice        Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  milestoneName  String
+  percentage     Decimal?  @db.Decimal(5, 2)
+  amountDue      Decimal   @db.Decimal(12, 2)
+  paymentStatus  String    @default("pending") // "pending" | "paid"
+  dueDate        DateTime?
+  paidAmount     Decimal   @default(0.00) @db.Decimal(12, 2)
+  paidAt         DateTime?
+  reminderPolicy String    @default("on_due_date")
+  createdAt      DateTime  @default(now())
 }
 
 model InvoiceLineItem {
@@ -154,30 +351,55 @@ model InvoiceLineItem {
 }
 
 model Income {
-  id           String    @id @default(uuid())
-  clientId     String
-  client       Client    @relation(fields: [clientId], references: [id])
-  projectId    String?
-  project      Project?  @relation(fields: [projectId], references: [id])
-  invoiceId    String?
-  invoice      Invoice?  @relation(fields: [invoiceId], references: [id])
-  amount       Decimal   @db.Decimal(12, 2)
-  currency     String
-  exchangeRate Decimal   @db.Decimal(10, 4) @default(1.0)
+  id            String    @id @default(uuid())
+  clientId      String
+  client        Client    @relation(fields: [clientId], references: [id])
+  projectId     String?
+  project       Project?  @relation(fields: [projectId], references: [id])
+  invoiceId     String?
+  invoice       Invoice?  @relation(fields: [invoiceId], references: [id])
+  amount        Decimal   @db.Decimal(12, 2)
+  currency      String
+  exchangeRate  Decimal   @default(1.0) @db.Decimal(10, 4)
   paymentMethod String?
-  paymentDate  DateTime
-  status       String
+  paymentDate   DateTime
+  status        String
+}
+
+model TaxProfile {
+  id            String   @id @default(uuid())
+  name          String   // e.g. "US California State Tax", "EU Standard VAT"
+  rate          Decimal  @db.Decimal(5, 2)
+  taxMode       String   // "inclusive" | "exclusive" | "reverse-charge" | "exempt"
+  jurisdiction  String
+  effectiveFrom DateTime @default(now())
+  createdAt     DateTime @default(now())
 }
 
 model Expense {
-  id           String   @id @default(uuid())
-  description  String
-  amount       Decimal  @db.Decimal(12, 2)
-  currency     String
-  category     String
-  paymentDate  DateTime
-  paymentMethod String?
-  createdAt    DateTime @default(now())
+  id                String    @id @default(uuid())
+  description       String
+  amount            Decimal   @db.Decimal(12, 2)
+  currency          String
+  category          String
+  paymentDate       DateTime
+  paymentMethod     String?
+  createdAt         DateTime  @default(now())
+  
+  // Custom operational columns
+  recurrence        String?   // "monthly" | "yearly" | "one-off"
+  vendor            String?
+  projectId         String?
+  project           Project?  @relation(fields: [projectId], references: [id])
+  status            String    @default("paid") // "paid" | "pending" | "upcoming" | "postponed"
+  dueDate           DateTime?
+  reminderDays      Int       @default(7)
+  taxAmount         Decimal?  @db.Decimal(12, 2)
+  taxProfile        String?
+  receiptAttachment String?
+  ownerUserId       String?
+  postponedUntil    DateTime?
+  postponeReason    String?
 }
 
 model Subscription {
@@ -190,6 +412,47 @@ model Subscription {
   paymentMethod String?
   reminderDays Int      @default(30)
   createdAt    DateTime @default(now())
+}
+
+model SalaryRecord {
+  id             String    @id @default(uuid())
+  employeeId     String
+  employee       User      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employmentType String    // "employee" | "intern" | "contractor"
+  grossAmount    Decimal   @db.Decimal(12, 2)
+  deductions     Decimal   @default(0.00) @db.Decimal(12, 2)
+  taxAmount      Decimal   @default(0.00) @db.Decimal(12, 2)
+  benefits       Decimal   @default(0.00) @db.Decimal(12, 2)
+  netAmount      Decimal   @db.Decimal(12, 2)
+  dueDate        DateTime
+  paidDate       DateTime?
+  payPeriod      String    // e.g. "2026-07"
+  status         String    @default("pending") // "pending" | "paid" | "delayed"
+  createdAt      DateTime  @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String   // e.g. "financial_edit", "access_approved", "password_reveal"
+  details   String   @db.Text
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+}
+
+model ProfitabilitySnapshot {
+  id               String   @id @default(uuid())
+  projectId        String   @unique
+  project          Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  revenue          Decimal  @default(0.00) @db.Decimal(12, 2)
+  directCost       Decimal  @default(0.00) @db.Decimal(12, 2)
+  indirectCost     Decimal  @default(0.00) @db.Decimal(12, 2)
+  margin           Decimal  @default(0.00) @db.Decimal(5, 2)
+  status           String   @default("healthy") // "healthy" | "borderline" | "loss-making"
+  apportionmentLog String?  @db.Text
+  updatedAt        DateTime @updatedAt
 }
 
 model WebsiteMonitor {

@@ -20,6 +20,7 @@ import { FinancialModule } from './modules/financial/financial.module';
 import { MonitoringModule } from './modules/monitoring/monitoring.module';
 import { CommsModule } from './modules/comms/comms.module';
 import { HealthModule } from './modules/health/health.module';
+import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { HealthModule } from './modules/health/health.module';
     MonitoringModule,
     CommsModule,
     HealthModule,
+    AuditLogsModule,
   ],
   providers: [
     // Activate global throttler rate limiting on all endpoints
