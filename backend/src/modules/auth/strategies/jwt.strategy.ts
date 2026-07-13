@@ -14,13 +14,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: { sub: string; email: string }) {
-    const admin = await this.prisma.admin.findUnique({
+    const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
       include: { company: true },
     });
-    if (!admin) {
-      throw new UnauthorizedException('Admin account not found');
+    if (!user) {
+      throw new UnauthorizedException('User account not found');
     }
-    return admin;
+    return user;
   }
 }
