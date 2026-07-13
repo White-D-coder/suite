@@ -33,11 +33,17 @@ async function bootstrap() {
   // Serve uploads folder statically for local storage provider
   app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
-  // Configure CORS using FRONTEND_URL environment variable (supports comma-separated list)
+  // Configure CORS using FRONTEND_URL environment variable (supports comma-separated list) and local development ports
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
   const origins = frontendUrl.split(',').map(o => o.trim());
   app.enableCors({
-    origin: origins,
+    origin: (origin, callback) => {
+      if (!origin || origins.includes(origin) || origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     allowedHeaders: 'Content-Type, Accept, Authorization, X-Trace-Id',

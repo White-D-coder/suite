@@ -17,12 +17,18 @@ export class AuthController {
 
   @UseGuards(AdminGuard)
   @Get('me')
-  async me(@Req() req: Request) {
+  async me(@Req() req: any) {
     const admin = req.user as any;
     if (!admin) {
       return null;
     }
     const { passwordHash, ...profile } = admin;
     return profile;
+  }
+
+  @UseGuards(AdminGuard)
+  @Get('users')
+  async getAllUsers() {
+    return this.authService.getAllUsers();
   }
 }
