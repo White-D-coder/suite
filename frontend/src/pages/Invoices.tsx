@@ -72,6 +72,11 @@ export default function Invoices() {
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [invoiceDetailOpen, setInvoiceDetailOpen] = useState(false);
 
+  // Discount state
+  const [discounts, setDiscounts] = useState<{ type: 'percentage' | 'fixed'; value: number; purpose: string; notes: string }[]>([]);
+  const [showDiscountForm, setShowDiscountForm] = useState(false);
+  const [discountForm, setDiscountForm] = useState({ type: 'percentage' as 'percentage' | 'fixed', value: 0, purpose: 'client_retention', notes: '' });
+
   const { data: invoices, isLoading: invoicesLoading } = useQuery<Invoice[]>({ 
     queryKey: ['invoices-list'], 
     queryFn: () => api.get('/invoices').then(r => r.data) 
@@ -184,8 +189,17 @@ export default function Invoices() {
     total = baseSubtotal + taxAmount;
   }
 
+  // Apply discounts
+  const discountTotal = discounts.reduce((sum, d) => {
+    if (d.type === 'percentage') return sum + (baseSubtotal * d.value / 100);
+    return sum + d.value;
+  }, 0);
+  const taxableAmount = Math.max(0, computedSubtotal - discountTotal);
+  const adjustedTax = taxProfile === 'exempt' || taxProfile === 'reverse-charge' ? 0 : taxableAmount * (taxRate / 100);
+  const finalPayable = taxProfile === 'inclusive' ? total - discountTotal : taxableAmount + adjustedTax;
+
   // Currency conversions
-  const convertedTotal = total * liveFxRate;
+  const convertedTotal = finalPayable * liveFxRate;
 
   const handleGenerateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -497,15 +511,121 @@ export default function Invoices() {
               </button>
             </div>
 
-            {/* Summary */}
-            <div className="flex justify-between items-end pt-4" style={{ borderTop: '1px solid var(--border-subtle)' }}>
-              <div className="space-y-0.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
-                <p>Subtotal: <span className="font-mono">${computedSubtotal.toFixed(2)}</span></p>
-                <p>Tax ({taxRate}%): <span className="font-mono">${taxAmount.toFixed(2)}</span></p>
+            {/* ── Discounts Section ── */}
+            <div style={{ background: 'var(--surface-sunken)', borderRadius: 10, padding: '1rem', marginTop: '0.75rem', border: '1px solid var(--border-subtle)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: discounts.length > 0 || showDiscountForm ? '0.75rem' : 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Calculator size={14} style={{ color: 'var(--accent)' }} />
+                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-primary)' }}>Discounts</span>
+                  {discounts.length > 0 && (
+                    <span style={{ fontSize: '0.62rem', fontWeight: 700, background: '#ef444418', color: '#ef4444', padding: '1px 6px', borderRadius: 99 }}>
+                      −{currency} {discountTotal.toFixed(2)}
+                    </span>
+                  )}
+                </div>
+                <button type="button" onClick={() => setShowDiscountForm(!showDiscountForm)} style={{ fontSize: '0.72rem', color: 'var(--accent)', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }}>
+                  {showDiscountForm ? 'Cancel' : '+ Add Discount'}
+                </button>
               </div>
-              <div className="text-right">
-                <p className="t-label">Total SOW (Base USD)</p>
-                <p className="text-2xl font-extrabold font-mono text-[var(--accent)]">${total.toFixed(2)}</p>
+
+              {/* Active discounts */}
+              {discounts.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: showDiscountForm ? '0.75rem' : 0 }}>
+                  {discounts.map((d, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.5rem 0.75rem', background: 'var(--surface-card)', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
+                      <div>
+                        <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                          {d.type === 'percentage' ? `${d.value}%` : `${currency} ${d.value.toFixed(2)}`}
+                        </span>
+                        <span style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)', marginLeft: 8, textTransform: 'capitalize' }}>
+                          {d.purpose.replace(/_/g, ' ')}
+                        </span>
+                        {d.notes && <span style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)', marginLeft: 6 }}>— {d.notes}</span>}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#ef4444' }}>
+                          −{currency} {(d.type === 'percentage' ? baseSubtotal * d.value / 100 : d.value).toFixed(2)}
+                        </span>
+                        <button type="button" onClick={() => setDiscounts(ds => ds.filter((_, j) => j !== i))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: 2 }}>
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Add discount form */}
+              {showDiscountForm && (
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                  <div style={{ flex: '0 0 100px' }}>
+                    <label style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-tertiary)', display: 'block', marginBottom: 2 }}>Type</label>
+                    <select value={discountForm.type} onChange={e => setDiscountForm(f => ({ ...f, type: e.target.value as any }))} style={{ width: '100%', padding: '0.4rem 0.5rem', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--surface-card)', color: 'var(--text-primary)', fontSize: '0.75rem' }}>
+                      <option value="percentage">Percentage</option>
+                      <option value="fixed">Fixed Amount</option>
+                    </select>
+                  </div>
+                  <div style={{ flex: '0 0 90px' }}>
+                    <label style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-tertiary)', display: 'block', marginBottom: 2 }}>{discountForm.type === 'percentage' ? '% Off' : 'Amount'}</label>
+                    <input type="number" min="0" step="0.01" value={discountForm.value || ''} onChange={e => setDiscountForm(f => ({ ...f, value: parseFloat(e.target.value) || 0 }))} placeholder="0" style={{ width: '100%', padding: '0.4rem 0.5rem', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--surface-card)', color: 'var(--text-primary)', fontSize: '0.75rem' }} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 120 }}>
+                    <label style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-tertiary)', display: 'block', marginBottom: 2 }}>Purpose</label>
+                    <select value={discountForm.purpose} onChange={e => setDiscountForm(f => ({ ...f, purpose: e.target.value }))} style={{ width: '100%', padding: '0.4rem 0.5rem', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--surface-card)', color: 'var(--text-primary)', fontSize: '0.75rem' }}>
+                      <option value="client_retention">Client Retention</option>
+                      <option value="volume_discount">Volume Discount</option>
+                      <option value="early_payment">Early Payment</option>
+                      <option value="seasonal_promo">Seasonal Promo</option>
+                      <option value="goodwill">Goodwill</option>
+                      <option value="negotiated">Negotiated</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 120 }}>
+                    <label style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-tertiary)', display: 'block', marginBottom: 2 }}>Notes</label>
+                    <input value={discountForm.notes} onChange={e => setDiscountForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional notes" style={{ width: '100%', padding: '0.4rem 0.5rem', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--surface-card)', color: 'var(--text-primary)', fontSize: '0.75rem' }} />
+                  </div>
+                  <button type="button" onClick={() => {
+                    if (discountForm.value > 0) {
+                      setDiscounts(d => [...d, { ...discountForm }]);
+                      setDiscountForm({ type: 'percentage', value: 0, purpose: 'client_retention', notes: '' });
+                      setShowDiscountForm(false);
+                    }
+                  }} style={{ padding: '0.4rem 0.75rem', borderRadius: 8, background: 'var(--accent)', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                    Apply
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Summary — Full Breakdown */}
+            <div className="pt-4" style={{ borderTop: '1px solid var(--border-subtle)', marginTop: '0.75rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '6px 2rem', fontSize: '0.78rem' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Subtotal</span>
+                <span style={{ textAlign: 'right', fontFamily: 'monospace', color: 'var(--text-primary)' }}>{currency} {computedSubtotal.toFixed(2)}</span>
+
+                {discountTotal > 0 && <>
+                  <span style={{ color: '#ef4444', fontWeight: 600 }}>Discount</span>
+                  <span style={{ textAlign: 'right', fontFamily: 'monospace', color: '#ef4444', fontWeight: 600 }}>−{currency} {discountTotal.toFixed(2)}</span>
+                </>}
+
+                {discountTotal > 0 && <>
+                  <span style={{ color: 'var(--text-secondary)' }}>Taxable Amount</span>
+                  <span style={{ textAlign: 'right', fontFamily: 'monospace', color: 'var(--text-primary)' }}>{currency} {taxableAmount.toFixed(2)}</span>
+                </>}
+
+                <span style={{ color: 'var(--text-secondary)' }}>Tax ({taxRate}% {taxProfile})</span>
+                <span style={{ textAlign: 'right', fontFamily: 'monospace', color: 'var(--text-primary)' }}>{currency} {(discountTotal > 0 ? adjustedTax : taxAmount).toFixed(2)}</span>
+
+                <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--border-subtle)', margin: '4px 0' }} />
+
+                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>Final Payable</span>
+                <span style={{ textAlign: 'right', fontFamily: 'monospace', fontSize: '1.1rem', fontWeight: 800, color: 'var(--accent)' }}>{currency} {finalPayable.toFixed(2)}</span>
+
+                {currency !== 'USD' && <>
+                  <span style={{ color: 'var(--text-tertiary)', fontSize: '0.72rem' }}>Converted @ {liveFxRate.toFixed(4)}</span>
+                  <span style={{ textAlign: 'right', fontFamily: 'monospace', color: 'var(--text-tertiary)', fontSize: '0.72rem' }}>USD {(finalPayable / liveFxRate).toFixed(2)}</span>
+                </>}
               </div>
             </div>
 
