@@ -21,6 +21,8 @@ import { MonitoringModule } from './modules/monitoring/monitoring.module';
 import { CommsModule } from './modules/comms/comms.module';
 import { HealthModule } from './modules/health/health.module';
 import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
+import { DispatchModule } from './modules/dispatch/dispatch.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -57,6 +59,8 @@ import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
     CommsModule,
     HealthModule,
     AuditLogsModule,
+    DispatchModule,
+    NotificationsModule,
   ],
   providers: [
     // Activate global throttler rate limiting on all endpoints

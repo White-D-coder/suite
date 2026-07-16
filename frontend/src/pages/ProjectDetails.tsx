@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useOutletContext } from 'react-router-dom';
@@ -9,7 +9,9 @@ import {
   ArrowLeft, Loader2, AlertTriangle, GitBranch, Globe,
   RefreshCw, Plus, Calendar, AlertCircle, FileCode, User,
   KeyRound, Users, ShieldAlert, DollarSign, Send, Trash2,
-  Lock, Eye, EyeOff, Check, Copy, CheckSquare, Clock
+  Lock, Eye, EyeOff, Check, Copy, CheckSquare, Clock,
+  MessageSquare, Mic, Mail, Phone, Video, FileText as FileTextIcon,
+  Zap, CheckCircle2, XCircle, Edit3, Layers, Server, Database, Code
 } from 'lucide-react';
 
 interface Task { id: string; name: string; assignedTo?: string; deadline?: string; progress: number; status: string; comments?: string; }
@@ -866,6 +868,375 @@ export default function ProjectDetails() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* ── Dispatch Feed ─────────────────────────────────────── */}
+      <DispatchSection projectId={projectId!} role={role} />
+
+      {/* ── Technology Stack ──────────────────────────────────── */}
+      <TechStackSection projectId={projectId!} />
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────── */
+/* Dispatch Section Component                                  */
+/* ─────────────────────────────────────────────────────────── */
+const COMM_ICONS: Record<string, React.ReactNode> = {
+  meeting: <Video size={14} />,
+  call: <Phone size={14} />,
+  email: <Mail size={14} />,
+  whatsapp: <MessageSquare size={14} />,
+  slack: <Zap size={14} />,
+  internal_note: <FileTextIcon size={14} />,
+  transcript: <Mic size={14} />,
+  status_update: <CheckCircle2 size={14} />,
+};
+
+const COMM_COLORS: Record<string, string> = {
+  meeting: '#6366f1', call: '#22c55e', email: '#3b82f6', whatsapp: '#25d366',
+  slack: '#4a154b', internal_note: '#94a3b8', transcript: '#f59e0b', status_update: '#06b6d4',
+};
+
+function DispatchSection({ projectId, role }: { projectId: string; role: string }) {
+  const [entries, setEntries] = useState<any[]>([]);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [form, setForm] = useState({ title: '', communicationType: 'meeting', source: 'manual', occurredAt: new Date().toISOString().slice(0, 16), rawContent: '', priority: 'normal' });
+  const [loading, setLoading] = useState(false);
+  const [summaryLoading, setSummaryLoading] = useState<string | null>(null);
+  const [editingSummary, setEditingSummary] = useState<string | null>(null);
+  const [editedSummaryText, setEditedSummaryText] = useState('');
+  const [filterType, setFilterType] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  const isPriv = ['owner', 'admin'].includes(role);
+
+  const load = () => {
+    const params: string[] = [];
+    if (filterType) params.push(`communicationType=${filterType}`);
+    if (filterStatus) params.push(`verificationStatus=${filterStatus}`);
+    api.get(`/projects/${projectId}/dispatch${params.length ? '?' + params.join('&') : ''}`).then(r => setEntries(r.data || []));
+  };
+
+  useEffect(() => { load(); }, [projectId, filterType, filterStatus]);
+
+  const createEntry = async () => {
+    setLoading(true);
+    try {
+      await api.post(`/projects/${projectId}/dispatch`, { ...form, occurredAt: new Date(form.occurredAt).toISOString() });
+      setShowCreate(false);
+      setForm({ title: '', communicationType: 'meeting', source: 'manual', occurredAt: new Date().toISOString().slice(0, 16), rawContent: '', priority: 'normal' });
+      load();
+    } catch (e: any) { alert(e.response?.data?.message || 'Failed'); }
+    finally { setLoading(false); }
+  };
+
+  const generateSummary = async (id: string) => {
+    setSummaryLoading(id);
+    try {
+      await api.post(`/dispatch/${id}/generate-summary`);
+      load();
+    } finally { setSummaryLoading(null); }
+  };
+
+  const verifySummary = async (id: string) => {
+    try {
+      await api.post(`/dispatch/${id}/verify-summary`, { editedSummary: editedSummaryText || undefined });
+      setEditingSummary(null);
+      load();
+    } catch {}
+  };
+
+  const createTask = async (entryId: string, actionItemId: string) => {
+    try {
+      await api.post(`/dispatch/${entryId}/create-task`, { actionItemId });
+      alert('Task created successfully!');
+      load();
+    } catch (e: any) { alert(e.response?.data?.message || 'Failed'); }
+  };
+
+  const sentimentColor = (s?: string) => ({ positive: '#22c55e', negative: '#ef4444', neutral: '#94a3b8', mixed: '#f59e0b' })[s || 'neutral'] || '#94a3b8';
+  const verificationColor = (s: string) => ({ verified: '#22c55e', unverified: '#f59e0b', needs_review: '#ef4444', inaccurate: '#ef4444' })[s] || '#94a3b8';
+
+  return (
+    <div style={{ marginTop: '1.5rem', background: 'var(--surface-card)', borderRadius: 14, border: '1px solid var(--border-subtle)', overflow: 'hidden' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', borderBottom: '1px solid var(--border-subtle)', background: 'var(--surface-sunken)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <MessageSquare size={16} style={{ color: 'var(--accent)' }} />
+          <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>Dispatch Feed</span>
+          <span style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)', background: 'var(--surface-base)', padding: '2px 8px', borderRadius: 99, border: '1px solid var(--border-subtle)' }}>
+            {entries.length} entries
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <select value={filterType} onChange={e => setFilterType(e.target.value)} style={{ padding: '0.35rem 0.6rem', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--surface-sunken)', color: 'var(--text-secondary)', fontSize: '0.72rem' }}>
+            <option value=''>All types</option>
+            {['meeting', 'call', 'email', 'whatsapp', 'slack', 'internal_note', 'transcript', 'status_update'].map(t => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
+          </select>
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ padding: '0.35rem 0.6rem', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--surface-sunken)', color: 'var(--text-secondary)', fontSize: '0.72rem' }}>
+            <option value=''>All statuses</option>
+            <option value='verified'>Verified</option>
+            <option value='unverified'>Unverified</option>
+            <option value='needs_review'>Needs Review</option>
+          </select>
+          <button onClick={() => setShowCreate(true)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '0.35rem 0.75rem', borderRadius: 8, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>
+            <Plus size={12} /> Add Entry
+          </button>
+        </div>
+      </div>
+
+      {/* Entries */}
+      <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        {entries.length === 0 ? (
+          <div style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>
+            <MessageSquare size={36} style={{ opacity: 0.2, display: 'block', margin: '0 auto 12px' }} />
+            No dispatch entries yet. Add meeting notes, call summaries or internal updates.
+          </div>
+        ) : entries.map(entry => {
+          const isExpanded = expanded === entry.id;
+          const typeColor = COMM_COLORS[entry.communicationType] || '#6366f1';
+          return (
+            <div key={entry.id} style={{ background: 'var(--surface-base)', borderRadius: 10, border: '1px solid var(--border-subtle)', overflow: 'hidden' }}>
+              {/* Entry header */}
+              <div
+                onClick={() => setExpanded(isExpanded ? null : entry.id)}
+                style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '0.9rem', cursor: 'pointer', transition: 'background 150ms' }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-sunken)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              >
+                {/* Type icon */}
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: `${typeColor}18`, color: typeColor, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
+                  {COMM_ICONS[entry.communicationType] || <MessageSquare size={14} />}
+                </div>
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)' }}>{entry.title}</span>
+                    <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: 99, background: `${verificationColor(entry.verificationStatus)}15`, color: verificationColor(entry.verificationStatus), fontWeight: 600 }}>
+                      {entry.verificationStatus === 'verified' ? '✓ Verified' : entry.verificationStatus === 'unverified' ? 'Review Needed' : entry.verificationStatus.replace(/_/g, ' ')}
+                    </span>
+                    {entry.sentiment && <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: 99, background: `${sentimentColor(entry.sentiment)}15`, color: sentimentColor(entry.sentiment), fontWeight: 600, textTransform: 'capitalize' }}>{entry.sentiment}</span>}
+                    {entry.priority !== 'normal' && <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: 99, background: entry.priority === 'high' ? '#ef444415' : '#f59e0b15', color: entry.priority === 'high' ? '#ef4444' : '#f59e0b', fontWeight: 600, textTransform: 'capitalize' }}>{entry.priority}</span>}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><Calendar size={10} /> {new Date(entry.occurredAt).toLocaleDateString()}</span>
+                    <span style={{ textTransform: 'capitalize' }}>{entry.communicationType.replace(/_/g, ' ')}</span>
+                    {entry.durationMinutes && <span><Clock size={10} style={{ marginRight: 3, verticalAlign: 'middle' }} />{entry.durationMinutes}m</span>}
+                    {entry.participants?.length > 0 && <span><Users size={10} style={{ marginRight: 3, verticalAlign: 'middle' }} />{entry.participants.length} participants</span>}
+                  </div>
+                  {entry.aiSummary && !isExpanded && (
+                    <p style={{ margin: '6px 0 0', fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.5, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as any }}>
+                      {entry.aiSummary}
+                    </p>
+                  )}
+                </div>
+
+                {/* Action buttons */}
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                  {!entry.aiSummary && (
+                    <button onClick={() => generateSummary(entry.id)} disabled={summaryLoading === entry.id} style={{ padding: '4px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--accent)', fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer' }}>
+                      {summaryLoading === entry.id ? '…' : '✨ Summarize'}
+                    </button>
+                  )}
+                  {entry.aiSummary && entry.verificationStatus !== 'verified' && isPriv && (
+                    <button onClick={() => { setEditingSummary(entry.id); setEditedSummaryText(entry.aiSummary || ''); }} style={{ padding: '4px 10px', borderRadius: 8, border: '1px solid #22c55e40', background: 'transparent', color: '#22c55e', fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer' }}>
+                      <CheckCircle2 size={12} style={{ marginRight: 3, verticalAlign: 'middle' }} /> Verify
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Expanded content */}
+              {isExpanded && (
+                <div style={{ padding: '0 0.9rem 0.9rem', borderTop: '1px solid var(--border-subtle)' }}>
+                  {/* AI Summary */}
+                  {entry.aiSummary && (
+                    <div style={{ background: 'var(--surface-sunken)', borderRadius: 8, padding: '0.85rem', margin: '0.75rem 0' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <Zap size={13} style={{ color: 'var(--accent)' }} />
+                          <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>AI Summary</span>
+                          {entry.aiConfidence && <span style={{ fontSize: '0.62rem', color: 'var(--text-tertiary)' }}>{Math.round(Number(entry.aiConfidence))}% confidence</span>}
+                        </div>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          {entry.verificationStatus !== 'verified' && (
+                            <button onClick={() => generateSummary(entry.id)} style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)', background: 'none', border: 'none', cursor: 'pointer' }}>↻ Regenerate</button>
+                          )}
+                        </div>
+                      </div>
+                      {editingSummary === entry.id ? (
+                        <div>
+                          <textarea value={editedSummaryText} onChange={e => setEditedSummaryText(e.target.value)} rows={6} style={{ width: '100%', padding: '0.5rem', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--surface-card)', color: 'var(--text-primary)', fontSize: '0.78rem', resize: 'vertical', marginBottom: 8 }} />
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button onClick={() => verifySummary(entry.id)} style={{ padding: '4px 12px', borderRadius: 8, border: 'none', background: '#22c55e', color: '#fff', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}>Verify & Save</button>
+                            <button onClick={() => setEditingSummary(null)} style={{ padding: '4px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', fontSize: '0.72rem', cursor: 'pointer' }}>Cancel</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-primary)', lineHeight: 1.6 }}>{entry.aiSummary}</p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Decisions */}
+                  {entry.decisions?.length > 0 && (
+                    <div style={{ marginBottom: '0.75rem' }}>
+                      <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Decisions</div>
+                      {entry.decisions.map((d: any) => (
+                        <div key={d.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '4px 0' }}>
+                          <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#6366f1', marginTop: 6, flexShrink: 0 }} />
+                          <span style={{ fontSize: '0.78rem', color: 'var(--text-primary)', lineHeight: 1.5 }}>{d.decisionText}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Action items */}
+                  {entry.actionItems?.length > 0 && (
+                    <div style={{ marginBottom: '0.75rem' }}>
+                      <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Action Items</div>
+                      {entry.actionItems.map((ai: any) => (
+                        <div key={ai.id} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--border-subtle)' }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: '0.78rem', color: 'var(--text-primary)' }}>{ai.actionText}</div>
+                            <div style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)', marginTop: 2, display: 'flex', gap: 10 }}>
+                              {ai.assignedUserId && <span>Assigned to: {ai.assignedUserId}</span>}
+                              {ai.dueDate && <span>Due: {new Date(ai.dueDate).toLocaleDateString()}</span>}
+                              <span style={{ textTransform: 'capitalize', color: ai.status === 'done' ? '#22c55e' : ai.status === 'in_progress' ? '#f59e0b' : 'var(--text-tertiary)' }}>{ai.status}</span>
+                            </div>
+                          </div>
+                          {!ai.linkedTaskId && isPriv && (
+                            <button onClick={() => createTask(entry.id, ai.id)} style={{ padding: '4px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--accent)', fontSize: '0.68rem', fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
+                              + Task
+                            </button>
+                          )}
+                          {ai.linkedTaskId && <span style={{ fontSize: '0.65rem', color: '#22c55e', fontWeight: 600, flexShrink: 0 }}>✓ Task created</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Raw content */}
+                  {entry.rawContent && (
+                    <details style={{ marginTop: 8 }}>
+                      <summary style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', cursor: 'pointer', userSelect: 'none' }}>Show raw notes</summary>
+                      <pre style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', lineHeight: 1.6, marginTop: 8, padding: '0.75rem', background: 'var(--surface-sunken)', borderRadius: 8, whiteSpace: 'pre-wrap', overflow: 'auto' }}>{entry.rawContent}</pre>
+                    </details>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Create Entry Modal */}
+      {showCreate && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => setShowCreate(false)}>
+          <div style={{ width: 520, background: 'var(--surface-base)', borderRadius: 16, padding: '1.5rem', border: '1px solid var(--border-subtle)', maxHeight: '85vh', overflowY: 'auto' }}
+            onClick={e => e.stopPropagation()}>
+            <h3 style={{ margin: '0 0 1rem', fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)' }}>New Dispatch Entry</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
+              <div>
+                <label style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>Title *</label>
+                <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Client Review Meeting — July 16" style={{ width: '100%', padding: '0.45rem 0.75rem', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--surface-sunken)', color: 'var(--text-primary)', fontSize: '0.8rem' }} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.7rem' }}>
+                <div>
+                  <label style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>Type</label>
+                  <select value={form.communicationType} onChange={e => setForm(f => ({ ...f, communicationType: e.target.value }))} style={{ width: '100%', padding: '0.45rem 0.75rem', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--surface-sunken)', color: 'var(--text-primary)', fontSize: '0.78rem' }}>
+                    {['meeting', 'call', 'email', 'whatsapp', 'slack', 'internal_note', 'transcript', 'status_update'].map(t => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>Date & Time</label>
+                  <input type="datetime-local" value={form.occurredAt} onChange={e => setForm(f => ({ ...f, occurredAt: e.target.value }))} style={{ width: '100%', padding: '0.45rem 0.75rem', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--surface-sunken)', color: 'var(--text-primary)', fontSize: '0.78rem' }} />
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>Meeting Notes / Raw Content</label>
+                <textarea value={form.rawContent} onChange={e => setForm(f => ({ ...f, rawContent: e.target.value }))} rows={8} placeholder="Paste meeting notes, email thread, or call summary here. AI will generate a structured summary." style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--surface-sunken)', color: 'var(--text-primary)', fontSize: '0.78rem', resize: 'vertical', lineHeight: 1.6 }} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.7rem' }}>
+                <div>
+                  <label style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>Priority</label>
+                  <select value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))} style={{ width: '100%', padding: '0.45rem 0.75rem', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--surface-sunken)', color: 'var(--text-primary)', fontSize: '0.78rem' }}>
+                    <option value='low'>Low</option>
+                    <option value='normal'>Normal</option>
+                    <option value='high'>High</option>
+                    <option value='critical'>Critical</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>Source</label>
+                  <select value={form.source} onChange={e => setForm(f => ({ ...f, source: e.target.value }))} style={{ width: '100%', padding: '0.45rem 0.75rem', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--surface-sunken)', color: 'var(--text-primary)', fontSize: '0.78rem' }}>
+                    {['manual', 'google_meet', 'zoom', 'teams', 'phone', 'email', 'whatsapp'].map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: '1rem' }}>
+              <button onClick={() => setShowCreate(false)} style={{ padding: '0.5rem 1rem', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.8rem' }}>Cancel</button>
+              <button onClick={createEntry} disabled={loading || !form.title} style={{ padding: '0.5rem 1rem', borderRadius: 8, border: 'none', background: 'var(--accent)', color: '#fff', cursor: loading ? 'not-allowed' : 'pointer', fontSize: '0.8rem', fontWeight: 600 }}>
+                {loading ? 'Saving…' : 'Save Entry'}
+              </button>
+              {form.rawContent && !loading && (
+                <button onClick={async () => { await createEntry(); }} disabled={loading} style={{ padding: '0.5rem 1rem', borderRadius: 8, border: 'none', background: '#6366f1', color: '#fff', cursor: loading ? 'not-allowed' : 'pointer', fontSize: '0.8rem', fontWeight: 600 }}>
+                  ✨ Save & Summarize
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────── */
+/* Technology Stack Section                                    */
+/* ─────────────────────────────────────────────────────────── */
+function TechStackSection({ projectId }: { projectId: string }) {
+  const [techLinks, setTechLinks] = useState<any[]>([]);
+
+  useEffect(() => {
+    api.get(`/vault/project/${projectId}`).then(r => setTechLinks(r.data || []));
+  }, [projectId]);
+
+  if (techLinks.length === 0) return null;
+
+  return (
+    <div style={{ marginTop: '1rem', background: 'var(--surface-card)', borderRadius: 14, border: '1px solid var(--border-subtle)', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '1rem 1.25rem', borderBottom: '1px solid var(--border-subtle)', background: 'var(--surface-sunken)' }}>
+        <Layers size={15} style={{ color: 'var(--accent)' }} />
+        <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>Technology Stack</span>
+        <span style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)', background: 'var(--surface-base)', padding: '2px 8px', borderRadius: 99, border: '1px solid var(--border-subtle)' }}>{techLinks.length} linked</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.75rem', padding: '1rem' }}>
+        {techLinks.map((link: any) => {
+          const acc = link.technologyAccount;
+          return (
+            <div key={link.id} style={{ background: 'var(--surface-sunken)', borderRadius: 10, border: '1px solid var(--border-subtle)', padding: '0.75rem' }}>
+              <div style={{ fontWeight: 700, fontSize: '0.82rem', color: 'var(--text-primary)', marginBottom: 4 }}>{acc.technology.name}</div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', marginBottom: 6 }}>{acc.accountName}</div>
+              {acc.environments.length > 0 && (
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                  {acc.environments.map((env: any) => (
+                    <span key={env.id} style={{ fontSize: '0.62rem', padding: '2px 6px', borderRadius: 6, background: 'var(--surface-card)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', textTransform: 'capitalize' }}>
+                      {env.environmentType}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.62rem', padding: '2px 6px', borderRadius: 6, background: acc.status === 'active' ? '#22c55e15' : '#ef444415', color: acc.status === 'active' ? '#22c55e' : '#ef4444', fontWeight: 600 }}>{acc.status}</span>
+                {acc.isLifetime && <span style={{ fontSize: '0.62rem', padding: '2px 6px', borderRadius: 6, background: '#6366f115', color: '#6366f1', fontWeight: 600 }}>∞ Lifetime</span>}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

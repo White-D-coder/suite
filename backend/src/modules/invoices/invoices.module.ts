@@ -3,6 +3,7 @@ import { BullModule } from '@nestjs/bull';
 import { InvoicesService } from './invoices.service';
 import { InvoicesController } from './invoices.controller';
 import { InvoiceProcessor } from './processors/invoice.processor';
+import { DiscountService } from './discount.service';
 import { AuthModule } from '../auth/auth.module';
 import { FinancialModule } from '../financial/financial.module';
 
@@ -15,7 +16,8 @@ import { FinancialModule } from '../financial/financial.module';
     }),
   ],
   controllers: [InvoicesController],
-  providers: [InvoicesService, InvoiceProcessor],
-  exports: [InvoicesService],
+  providers: [InvoicesService, InvoiceProcessor, DiscountService],
+  exports: [InvoicesService, DiscountService],
 })
 export class InvoicesModule {}
+

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { api } from '../lib/api';
+import NotificationCentre from './NotificationCentre';
 import {
   LayoutDashboard, Users, FolderKanban, KeyRound,
   FileText, DollarSign, Menu, X, LogOut, Bell,
@@ -346,21 +347,8 @@ export default function SidebarLayout() {
               )}
             </div>
 
-            {/* Notification bell */}
-            <button
-              style={{
-                width: 36, height: 36, borderRadius: 8,
-                border: '1px solid var(--border-subtle)',
-                background: 'transparent',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                cursor: 'pointer', color: 'var(--text-secondary)',
-                transition: 'background 150ms',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-sunken)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-            >
-              <Bell size={15} />
-            </button>
+            {/* Notification Centre */}
+            <NotificationCentre />
 
             {/* User avatar */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>

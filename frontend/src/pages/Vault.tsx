@@ -1,498 +1,1098 @@
-import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useOutletContext } from 'react-router-dom';
-import { api } from '../lib/api';
-import TabBar from '../components/TabBar';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  KeyRound, Plus, Eye, EyeOff, Copy, Check,
-  Search, Lock, Loader2, AlertTriangle, ShieldCheck,
-  CheckCircle, XCircle, RotateCcw, AlertCircle, Clock
+  Search, Plus, Shield, Globe, Key, Lock, Eye, EyeOff, ChevronDown, ChevronRight,
+  X, Check, Clock, AlertTriangle, Link2, Users, RefreshCw, ExternalLink,
+  Infinity, Calendar, Server, Database, Code, CreditCard, Mail, MessageSquare,
+  Palette, BarChart3, Cpu, Zap, ShieldCheck, Building2, FolderOpen,
+  Filter, SortAsc, Download, MoreHorizontal, ArrowRight, ChevronUp, Layers
 } from 'lucide-react';
+import { api } from '../lib/api';
 
-interface Project { id: string; name: string; }
-interface Secret {
-  id: string; secretType: string; username?: string;
-  encryptedValue: string; tool?: string; environment?: string; owner?: string;
+/* ─── Types ─────────────────────────────────────────────── */
+interface Technology {
+  id: string;
+  name: string;
+  category: string;
+  officialUrl?: string;
+  logoUrl?: string;
+  fieldDefinitions?: FieldDef[];
 }
-interface Collection {
-  id: string; provider?: string; rotationPolicy?: string; lastRotationDate?: string;
-  project: Project;
-  secrets: Secret[];
+
+interface FieldDef {
+  fieldKey: string;
+  fieldLabel: string;
+  fieldType: string;
+  isSecret: boolean;
+  isRequired: boolean;
+  displayOrder: number;
 }
+
+interface TechAccount {
+  id: string;
+  accountName: string;
+  accountIdentifier?: string;
+  technology: Technology;
+  ownerType: string;
+  status: string;
+  isLifetime: boolean;
+  subscriptionPlan?: string;
+  billingCycle?: string;
+  billingAmount?: number;
+  billingCurrency?: string;
+  nextBillingDate?: string;
+  subscriptionStatus: string;
+  lastRotationDate?: string;
+  nextRotationDate?: string;
+  twoFactorEnabled: boolean;
+  projectLinks: { project: { id: string; name: string } }[];
+  environments: TechEnv[];
+  fields: TechField[];
+  grants?: any[];
+  tags: string[];
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface TechEnv {
+  id: string;
+  environmentName: string;
+  environmentType: string;
+  url?: string;
+  active: boolean;
+}
+
+interface TechField {
+  id: string;
+  fieldKey: string;
+  fieldLabel: string;
+  isSecret: boolean;
+  nonSecretValue?: string;
+  encryptedValue?: string;
+  environmentId?: string;
+}
+
 interface AccessRequest {
   id: string;
-  secretScope: string;
+  requesterId: string;
   status: string;
-  expiresAt?: string;
-  createdAt: string;
-  requester: { id: string; name: string; email: string };
-  project: { id: string; name: string };
-  approver?: { name: string };
-}
-interface RotationTask {
-  id: string;
-  status: string;
-  reason?: string;
-  priority: string;
-  snoozedUntil?: string;
-  collection: {
+  urgency: string;
+  requestReason: string;
+  taskReference?: string;
+  requestedDurationMin?: number;
+  requestedAt: string;
+  technologyAccount: { id: string; accountName: string; technology: Technology };
+  requestedFields: {
     id: string;
-    provider?: string;
-    project: { name: string };
+    accountFieldId: string;
+    approved: boolean;
+    accountField: { fieldKey: string; fieldLabel: string; isSecret: boolean };
+  }[];
+}
+
+interface Grant {
+  id: string;
+  employeeId: string;
+  projectId: string;
+  active: boolean;
+  canReveal: boolean;
+  canCopy: boolean;
+  singleUse: boolean;
+  grantedAt: string;
+  expiresAt?: string;
+  lastAccessedAt?: string;
+  technologyAccount: { accountName: string; technology: Technology };
+  accountField: { fieldKey: string; fieldLabel: string; isSecret: boolean };
+}
+
+/* ─── Category Icons ─────────────────────────────────────── */
+const CAT_ICON: Record<string, React.ReactNode> = {
+  'Source Control': <Code size={13} />,
+  'Cloud Infrastructure': <Server size={13} />,
+  'Hosting': <Globe size={13} />,
+  'Domain and DNS': <Globe size={13} />,
+  'Database': <Database size={13} />,
+  'Email': <Mail size={13} />,
+  'Communication': <MessageSquare size={13} />,
+  'Design': <Palette size={13} />,
+  'Project Management': <FolderOpen size={13} />,
+  'Analytics': <BarChart3 size={13} />,
+  'Payment Gateway': <CreditCard size={13} />,
+  'Artificial Intelligence': <Cpu size={13} />,
+  'Marketing': <Zap size={13} />,
+  'CRM': <Building2 size={13} />,
+  'Security': <ShieldCheck size={13} />,
+};
+
+function catColor(category: string) {
+  const map: Record<string, string> = {
+    'Source Control': '#6366f1',
+    'Cloud Infrastructure': '#f59e0b',
+    'Hosting': '#06b6d4',
+    'Domain and DNS': '#10b981',
+    'Database': '#8b5cf6',
+    'Email': '#ec4899',
+    'Communication': '#3b82f6',
+    'Design': '#f97316',
+    'Project Management': '#14b8a6',
+    'Payment Gateway': '#22c55e',
+    'Artificial Intelligence': '#a78bfa',
+    'Marketing': '#fb923c',
+    'CRM': '#38bdf8',
+    'Security': '#ef4444',
   };
+  return map[category] || '#94a3b8';
 }
 
-const inputCls = 't-input w-full px-3 py-2 text-sm';
-const rSm = { borderRadius: 'var(--radius-sm)' };
-const dialogStyle = { background: 'var(--surface-card)', border: '1px solid var(--border-default)' };
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div className="space-y-1"><label className="t-label">{label}</label>{children}</div>;
+/* ─── Sub-components ─────────────────────────────────────── */
+function Badge({ label, color = '#6366f1', bg }: { label: string; color?: string; bg?: string }) {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+      padding: '2px 8px', borderRadius: 99,
+      background: bg || `${color}18`, color,
+      fontSize: '0.65rem', fontWeight: 600,
+    }}>
+      {label}
+    </span>
+  );
 }
 
-export default function Vault() {
-  const { user } = useOutletContext<{ user: any }>();
-  const role = user?.role || 'employee';
-  const qc = useQueryClient();
+function TabButton({ label, active, onClick, count }: { label: string; active: boolean; onClick: () => void; count?: number }) {
+  return (
+    <button onClick={onClick} style={{
+      padding: '0.45rem 0.9rem',
+      borderRadius: 8,
+      border: 'none',
+      background: active ? 'var(--accent)' : 'transparent',
+      color: active ? '#fff' : 'var(--text-secondary)',
+      fontSize: '0.78rem',
+      fontWeight: active ? 600 : 500,
+      cursor: 'pointer',
+      display: 'flex', alignItems: 'center', gap: 6,
+      transition: 'all 150ms',
+    }}>
+      {label}
+      {count !== undefined && (
+        <span style={{
+          background: active ? 'rgba(255,255,255,0.25)' : 'var(--surface-sunken)',
+          color: active ? '#fff' : 'var(--text-tertiary)',
+          fontSize: '0.6rem', fontWeight: 700,
+          padding: '1px 5px', borderRadius: 99,
+        }}>{count}</span>
+      )}
+    </button>
+  );
+}
 
-  const [activeSubTab, setActiveSubTab] = useState('collections');
+/* ─── Technology Directory Tab ───────────────────────────── */
+function TechnologyDirectory({ user }: { user: any }) {
+  const [catalogue, setCatalogue] = useState<Technology[]>([]);
+  const [accounts, setAccounts] = useState<TechAccount[]>([]);
   const [search, setSearch] = useState('');
-  
-  // Reveal / password re-auth states
-  const [revealOpen, setRevealOpen] = useState(false);
-  const [revealPassword, setRevealPassword] = useState('');
-  const [revealingSecretId, setRevealingSecretId] = useState<string | null>(null);
-  const [revealingProjectId, setRevealingProjectId] = useState<string | null>(null);
-  const [confirmedPasswords, setConfirmedPasswords] = useState<Record<string, string>>({});
-  const [decryptedSecrets, setDecryptedSecrets] = useState<Record<string, string>>({});
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [revealError, setRevealError] = useState('');
+  const [catFilter, setCatFilter] = useState('');
+  const [selectedAccount, setSelectedAccount] = useState<TechAccount | null>(null);
+  const [showAddAccount, setShowAddAccount] = useState(false);
+  const [selectedTech, setSelectedTech] = useState<Technology | null>(null);
+  const [revealedFields, setRevealedFields] = useState<Record<string, string>>({});
+  const [accountSearch, setAccountSearch] = useState('');
+  const [sortCol, setSortCol] = useState<string>('updatedAt');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newAccount, setNewAccount] = useState<any>({});
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+  const [activeEnvTab, setActiveEnvTab] = useState<string>('');
 
-  // Rotation complete / snooze states
-  const [rotateOpen, setRotateOpen] = useState(false);
-  const [rotatingTaskId, setRotatingTaskId] = useState<string | null>(null);
-  const [newSecretVal, setNewSecretVal] = useState('');
+  useEffect(() => {
+    api.get('/technologies').then(r => setCatalogue(r.data || []));
+    loadAccounts();
+  }, []);
 
-  const [snoozeOpen, setSnoozeOpen] = useState(false);
-  const [snoozingTaskId, setSnoozingTaskId] = useState<string | null>(null);
-  const [snoozeDays, setSnoozeDays] = useState('7');
-  const [snoozeReason, setSnoozeReason] = useState('');
-
-  // Queries
-  const { data: collections, isLoading } = useQuery<Collection[]>({
-    queryKey: ['vault-collections'],
-    queryFn: () => api.get('/credentials/collections').then(r => r.data),
-  });
-
-  const { data: requests } = useQuery<AccessRequest[]>({
-    queryKey: ['access-requests'],
-    queryFn: () => api.get('/credentials/requests').then(r => r.data),
-  });
-
-  const { data: rotationTasks } = useQuery<RotationTask[]>({
-    queryKey: ['rotation-tasks'],
-    queryFn: () => api.get('/credentials/rotation-queue').then(r => r.data),
-    enabled: ['owner', 'admin'].includes(role),
-  });
-
-  // Mutations
-  const approveMutation = useMutation({
-    mutationFn: (reqId: string) => api.post(`/credentials/requests/${reqId}/approve`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['access-requests'] }),
-  });
-
-  const rejectMutation = useMutation({
-    mutationFn: (reqId: string) => api.post(`/credentials/requests/${reqId}/reject`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['access-requests'] }),
-  });
-
-  const revokeMutation = useMutation({
-    mutationFn: (reqId: string) => api.post(`/credentials/requests/${reqId}/revoke`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['access-requests'] }),
-  });
-
-  const completeRotationMutation = useMutation({
-    mutationFn: ({ taskId, val }: { taskId: string; val: string }) => 
-      api.post(`/credentials/rotation-tasks/${taskId}/complete`, { newSecretValue: val }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['rotation-tasks'] });
-      qc.invalidateQueries({ queryKey: ['vault-collections'] });
-      setRotateOpen(false);
-      setNewSecretVal('');
-    },
-  });
-
-  const snoozeRotationMutation = useMutation({
-    mutationFn: ({ taskId, days, reason }: { taskId: string; days: number; reason: string }) => 
-      api.post(`/credentials/rotation-tasks/${taskId}/squeeze` /* fallbacks to snoop/snooze */, { snoozeDays: days, reason }),
-    // Wait, in controller we mapped: `/credentials/rotation-tasks/:id/snooze`
-    // Let's use snooze as path
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['rotation-tasks'] });
-      setSnoozeOpen(false);
-    },
-  });
-
-  // Execute actual snooze call
-  const triggerSnooze = (e: React.FormEvent) => {
-    e.preventDefault();
-    api.post(`/credentials/rotation-tasks/${snoozingTaskId}/snooze`, {
-      snoozeDays: Number(snoozeDays),
-      reason: snoozeReason,
-    }).then(() => {
-      qc.invalidateQueries({ queryKey: ['rotation-tasks'] });
-      setSnoozeOpen(false);
-      setSnoozeReason('');
-    });
+  const loadAccounts = () => {
+    api.get('/technology-accounts').then(r => setAccounts(r.data?.items || r.data || []));
   };
 
-  // Plaintext reveal submit
-  const handleRevealSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setRevealError('');
+  const categories = [...new Set(catalogue.map(t => t.category))].sort();
+
+  const filtered = accounts.filter(a => {
+    const q = (accountSearch || search).toLowerCase();
+    const matchSearch = !q || a.accountName.toLowerCase().includes(q) || a.technology.name.toLowerCase().includes(q) || (a.accountIdentifier || '').toLowerCase().includes(q);
+    const matchCat = !catFilter || a.technology.category === catFilter;
+    return matchSearch && matchCat;
+  }).sort((a: any, b: any) => {
+    const va = a[sortCol] || '';
+    const vb = b[sortCol] || '';
+    return sortDir === 'asc' ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+  });
+
+  const revealField = async (fieldId: string) => {
     try {
-      const { data } = await api.post(`/credentials/secrets/${revealingSecretId}/reveal`, {
-        confirmPassword: revealPassword,
-      });
-      setDecryptedSecrets({ ...decryptedSecrets, [revealingSecretId!]: data.decryptedValue });
-      
-      if (revealingProjectId) {
-        setConfirmedPasswords({ ...confirmedPasswords, [revealingProjectId]: revealPassword });
-      }
-      
-      setRevealOpen(false);
-      setRevealPassword('');
-    } catch (err: any) {
-      setRevealError(err.response?.data?.message || 'Incorrect password.');
+      const { data } = await api.post(`/vault/fields/${fieldId}/reveal`);
+      setRevealedFields(r => ({ ...r, [fieldId]: data.value || '(empty)' }));
+      // Auto-hide after 30 seconds
+      setTimeout(() => setRevealedFields(r => { const next = { ...r }; delete next[fieldId]; return next; }), 30000);
+    } catch {
+      alert('Access denied or no active grant for this field.');
     }
   };
 
-  const handleCopy = async (id: string, text: string) => {
+  const createAccount = async () => {
+    if (!selectedTech) return;
+    setLoading(true);
     try {
-      await navigator.clipboard.writeText(text);
-      setCopiedId(id);
-      setTimeout(() => setCopiedId(null), 2000);
-    } catch { /* ignored */ }
+      const { data: acct } = await api.post(`/technologies/${selectedTech.id}/accounts`, {
+        accountName: newAccount.accountName,
+        accountIdentifier: newAccount.accountIdentifier,
+        ownerType: newAccount.ownerType || 'agency',
+        subscriptionPlan: newAccount.subscriptionPlan,
+        billingCycle: newAccount.billingCycle,
+        billingAmount: newAccount.billingAmount ? parseFloat(newAccount.billingAmount) : undefined,
+        isLifetime: newAccount.isLifetime || false,
+        status: 'active',
+      });
+      // Create fields
+      const fields = (selectedTech.fieldDefinitions || []).filter(fd => fieldValues[fd.fieldKey]);
+      for (const fd of fields) {
+        await api.post(`/technology-accounts/${acct.id}/fields`, {
+          fieldKey: fd.fieldKey,
+          fieldLabel: fd.fieldLabel,
+          isSecret: fd.isSecret,
+          value: fieldValues[fd.fieldKey],
+        });
+      }
+      setShowAddForm(false);
+      setNewAccount({});
+      setFieldValues({});
+      loadAccounts();
+    } catch (e: any) {
+      alert(e.response?.data?.message || 'Failed to create account');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Filter collections
-  const filteredCollections = collections?.filter(col => {
-    const q = search.toLowerCase();
-    return col.project.name.toLowerCase().includes(q) || 
-      (col.provider && col.provider.toLowerCase().includes(q));
-  }) ?? [];
+  const headerStyle = {
+    padding: '0.5rem 0.75rem',
+    fontSize: '0.68rem',
+    fontWeight: 600,
+    color: 'var(--text-tertiary)',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.06em',
+    borderBottom: '1px solid var(--border-subtle)',
+    background: 'var(--surface-sunken)',
+    cursor: 'pointer',
+    userSelect: 'none' as const,
+  };
 
-  if (isLoading) {
-    return (
-      <div className="flex h-[80vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" style={{ color: 'var(--accent)' }} />
-      </div>
-    );
-  }
+  const cellStyle = {
+    padding: '0.65rem 0.75rem',
+    fontSize: '0.78rem',
+    color: 'var(--text-primary)',
+    borderBottom: '1px solid var(--border-subtle)',
+    verticalAlign: 'top' as const,
+  };
 
   return (
-    <div className="space-y-6 py-4">
-      {/* Header */}
-      <div>
-        <h1 className="t-page-title">Credential Governance Vault</h1>
-        <p className="t-page-subtitle">Granular least-privilege secrets access controls and rotation queue.</p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      {/* Filters row */}
+      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
+          <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
+          <input
+            value={accountSearch}
+            onChange={e => setAccountSearch(e.target.value)}
+            placeholder="Search technology accounts…"
+            style={{
+              width: '100%', padding: '0.45rem 0.75rem 0.45rem 2rem',
+              borderRadius: 8, border: '1px solid var(--border-subtle)',
+              background: 'var(--surface-sunken)', color: 'var(--text-primary)',
+              fontSize: '0.8rem',
+            }}
+          />
+        </div>
+
+        <select
+          value={catFilter}
+          onChange={e => setCatFilter(e.target.value)}
+          style={{
+            padding: '0.45rem 0.75rem', borderRadius: 8, border: '1px solid var(--border-subtle)',
+            background: 'var(--surface-sunken)', color: 'var(--text-primary)', fontSize: '0.78rem',
+          }}
+        >
+          <option value="">All categories</option>
+          {categories.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+
+        <button
+          onClick={() => { setShowAddForm(true); setSelectedTech(null); setNewAccount({}); setFieldValues({}); }}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '0.45rem 0.9rem', borderRadius: 8,
+            background: 'var(--accent)', color: '#fff',
+            border: 'none', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600,
+          }}
+        >
+          <Plus size={13} /> Add Technology
+        </button>
       </div>
 
-      {/* Tabs */}
-      <TabBar
-        tabs={[
-          { id: 'collections', label: 'Vault Collections' },
-          { id: 'requests', label: 'Access Approvals Queue' },
-          ...(['owner', 'admin'].includes(role) ? [{ id: 'rotation', label: 'Pending Rotations Queue' }] : []),
-        ]}
-        activeTab={activeSubTab}
-        onChange={setActiveSubTab}
-      />
-
-      {/* ─── Tab 1: Vault Collections ─── */}
-      {activeSubTab === 'collections' && (
-        <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <div className="relative max-w-xs w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none" style={{ color: 'var(--text-tertiary)' }} />
-              <input className="t-input w-full pl-9 pr-4 py-2 text-xs" style={rSm} placeholder="Search project, provider..." value={search} onChange={e => setSearch(e.target.value)} />
-            </div>
+      {/* Stats */}
+      <div style={{ display: 'flex', gap: '0.75rem' }}>
+        {[
+          { label: 'Total Accounts', value: accounts.length, color: '#6366f1' },
+          { label: 'Active', value: accounts.filter(a => a.status === 'active').length, color: '#22c55e' },
+          { label: 'Expiring (30d)', value: accounts.filter(a => a.nextBillingDate && new Date(a.nextBillingDate) < new Date(Date.now() + 30 * 86400000) && !a.isLifetime).length, color: '#f59e0b' },
+          { label: '2FA Enabled', value: accounts.filter(a => a.twoFactorEnabled).length, color: '#06b6d4' },
+        ].map(s => (
+          <div key={s.label} style={{
+            flex: 1, padding: '0.75rem',
+            background: 'var(--surface-card)', borderRadius: 10,
+            border: '1px solid var(--border-subtle)',
+          }}>
+            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: s.color }}>{s.value}</div>
+            <div style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)', marginTop: 2 }}>{s.label}</div>
           </div>
+        ))}
+      </div>
 
-          {role === 'finance' ? (
-            <div className="t-empty py-12">
-              <ShieldCheck className="h-10 w-10 text-amber-500 mb-2" />
-              <span className="text-sm font-semibold">Financial roles do not have credentials permission.</span>
-            </div>
-          ) : filteredCollections.length > 0 ? (
-            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {filteredCollections.map(col => (
-                <div key={col.id} className="t-card flex flex-col p-5 space-y-4">
-                  <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
-                    <div>
-                      <p className="font-bold text-sm text-[var(--text-primary)]">{col.project.name}</p>
-                      <p className="text-[10px] text-[var(--text-tertiary)]">{col.provider || 'Secrets Vault'}</p>
-                    </div>
-                    <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-[var(--accent-soft)] text-[var(--accent)]">
-                      {col.rotationPolicy || 'Manual'}
+      {/* Accounts table */}
+      <div style={{ borderRadius: 12, border: '1px solid var(--border-subtle)', overflow: 'hidden', background: 'var(--surface-card)' }}>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                {[
+                  { key: 'technology', label: 'Technology' },
+                  { key: 'accountName', label: 'Account' },
+                  { key: 'status', label: 'Status' },
+                  { key: 'billingCycle', label: 'Billing' },
+                  { key: 'nextBillingDate', label: 'Next Renewal' },
+                  { key: 'projects', label: 'Projects' },
+                  { key: 'twoFactor', label: '2FA' },
+                  { key: '', label: '' },
+                ].map(col => (
+                  <th
+                    key={col.key}
+                    style={headerStyle}
+                    onClick={() => {
+                      if (!col.key) return;
+                      if (sortCol === col.key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+                      else { setSortCol(col.key); setSortDir('asc'); }
+                    }}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      {col.label}
+                      {sortCol === col.key && (sortDir === 'asc' ? <ChevronUp size={10} /> : <ChevronDown size={10} />)}
                     </span>
-                  </div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr><td colSpan={8} style={{ ...cellStyle, textAlign: 'center', color: 'var(--text-tertiary)', padding: '2rem' }}>No accounts found</td></tr>
+              ) : filtered.map(acc => {
+                const isExpiringSoon = !acc.isLifetime && acc.nextBillingDate && new Date(acc.nextBillingDate) < new Date(Date.now() + 30 * 86400000);
+                return (
+                  <tr key={acc.id} style={{ cursor: 'pointer', transition: 'background 100ms' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-sunken)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                    onClick={() => setSelectedAccount(acc)}
+                  >
+                    {/* Technology */}
+                    <td style={cellStyle}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{
+                          width: 28, height: 28, borderRadius: 8, flexShrink: 0,
+                          background: `${catColor(acc.technology.category)}18`,
+                          color: catColor(acc.technology.category),
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                          {CAT_ICON[acc.technology.category] || <Globe size={13} />}
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: '0.8rem' }}>{acc.technology.name}</div>
+                          <div style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)' }}>{acc.technology.category}</div>
+                        </div>
+                      </div>
+                    </td>
 
-                  {col.secrets.length > 0 ? (
-                    <div className="space-y-3 flex-1">
-                      {col.secrets.map(sec => {
-                        const val = decryptedSecrets[sec.id];
-                        return (
-                          <div key={sec.id} className="space-y-1 text-xs">
-                            <span className="text-[10px] uppercase font-bold text-[var(--text-tertiary)]">{sec.secretType}</span>
-                            <div className="p-2 rounded bg-[var(--surface-sunken)] border border-[var(--border-subtle)] flex items-center justify-between gap-2">
-                              <span className="font-mono text-[var(--text-secondary)] truncate max-w-[130px]">{sec.username || 'API Key'}</span>
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                {val ? (
-                                  <div className="flex items-center gap-1 bg-[var(--surface-body)] px-1.5 py-0.5 rounded border border-[var(--border-subtle)]">
-                                    <span className="font-mono text-[var(--accent)] text-[11px] font-semibold">{val}</span>
-                                    <button onClick={() => handleCopy(sec.id, val)} className="text-[var(--text-tertiary)]"><Check size={10} className={copiedId === sec.id ? 'text-emerald-400' : ''} /></button>
-                                  </div>
-                                ) : (
-                                  <span className="font-mono text-[var(--text-tertiary)]">••••••••</span>
-                                )}
-                                <button
-                                  onClick={async () => {
-                                    if (val) {
-                                      const copy = { ...decryptedSecrets };
-                                      delete copy[sec.id];
-                                      setDecryptedSecrets(copy);
-                                    } else {
-                                      const cachedPass = confirmedPasswords[col.project.id];
-                                      if (cachedPass) {
-                                        try {
-                                          const { data } = await api.post(`/credentials/secrets/${sec.id}/reveal`, {
-                                            confirmPassword: cachedPass,
-                                          });
-                                          setDecryptedSecrets({ ...decryptedSecrets, [sec.id]: data.decryptedValue });
-                                        } catch (err) {
-                                          // Clear cache if validation fails and prompt
-                                          const copyPass = { ...confirmedPasswords };
-                                          delete copyPass[col.project.id];
-                                          setConfirmedPasswords(copyPass);
-                                          
-                                          setRevealingSecretId(sec.id);
-                                          setRevealingProjectId(col.project.id);
-                                          setRevealOpen(true);
-                                        }
-                                      } else {
-                                        setRevealingSecretId(sec.id);
-                                        setRevealingProjectId(col.project.id);
-                                        setRevealOpen(true);
-                                      }
-                                    }
-                                  }}
-                                  className="text-[var(--accent)] hover:underline ml-1 font-semibold text-[10px]"
-                                >
-                                  {val ? 'Hide' : 'Reveal'}
-                                </button>
-                              </div>
-                            </div>
+                    {/* Account */}
+                    <td style={cellStyle}>
+                      <div style={{ fontWeight: 500 }}>{acc.accountName}</div>
+                      {acc.accountIdentifier && <div style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)' }}>{acc.accountIdentifier}</div>}
+                    </td>
+
+                    {/* Status */}
+                    <td style={cellStyle}>
+                      <Badge
+                        label={acc.subscriptionStatus === 'active' ? 'Active' : acc.subscriptionStatus}
+                        color={acc.subscriptionStatus === 'active' ? '#22c55e' : acc.subscriptionStatus === 'expired' ? '#ef4444' : '#f59e0b'}
+                      />
+                    </td>
+
+                    {/* Billing */}
+                    <td style={cellStyle}>
+                      {acc.isLifetime ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#6366f1', fontWeight: 600, fontSize: '0.75rem' }}>
+                          <Infinity size={13} /> Lifetime
+                        </div>
+                      ) : acc.billingCycle ? (
+                        <div>
+                          <div style={{ fontSize: '0.78rem', fontWeight: 600 }}>{acc.billingCurrency || 'USD'} {acc.billingAmount?.toLocaleString() || '—'}</div>
+                          <div style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)', textTransform: 'capitalize' }}>{acc.billingCycle}</div>
+                        </div>
+                      ) : <span style={{ color: 'var(--text-tertiary)' }}>—</span>}
+                    </td>
+
+                    {/* Renewal */}
+                    <td style={cellStyle}>
+                      {acc.isLifetime ? <span style={{ color: 'var(--text-tertiary)' }}>N/A</span> :
+                        acc.nextBillingDate ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            {isExpiringSoon && <AlertTriangle size={11} style={{ color: '#f59e0b' }} />}
+                            <span style={{ color: isExpiringSoon ? '#f59e0b' : 'var(--text-primary)', fontSize: '0.75rem' }}>
+                              {new Date(acc.nextBillingDate).toLocaleDateString()}
+                            </span>
                           </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className="text-xs italic text-[var(--text-tertiary)] py-4">No secrets stored</p>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="t-empty">
-              <ShieldCheck className="h-10 w-10" style={{ color: 'var(--border-default)' }} />
-              <span className="text-sm font-semibold">No secrets collections configured</span>
-            </div>
-          )}
-        </div>
-      )}
+                        ) : <span style={{ color: 'var(--text-tertiary)' }}>—</span>}
+                    </td>
 
-      {/* ─── Tab 2: Access Approvals Queue ─── */}
-      {activeSubTab === 'requests' && (
-        <div className="t-card p-5 space-y-4">
-          <p className="font-bold text-sm text-[var(--text-primary)]">Pending and Historical Credentials Grants</p>
-          {requests && requests.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left">
-                <thead>
-                  <tr className="border-b border-[var(--border-subtle)] text-[var(--text-tertiary)] font-bold">
-                    <th className="py-2">Employee</th>
-                    <th className="py-2">Project</th>
-                    <th className="py-2">Scope</th>
-                    <th className="py-2">expiresAt</th>
-                    <th className="py-2">Status</th>
-                    <th className="py-2 text-right">Actions</th>
+                    {/* Projects */}
+                    <td style={cellStyle}>
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        {acc.projectLinks.slice(0, 2).map(pl => (
+                          <Badge key={pl.project.id} label={pl.project.name} color="#6366f1" />
+                        ))}
+                        {acc.projectLinks.length > 2 && <Badge label={`+${acc.projectLinks.length - 2}`} color="#6366f1" />}
+                        {acc.projectLinks.length === 0 && <span style={{ color: 'var(--text-tertiary)', fontSize: '0.72rem' }}>None</span>}
+                      </div>
+                    </td>
+
+                    {/* 2FA */}
+                    <td style={cellStyle}>
+                      {acc.twoFactorEnabled
+                        ? <span style={{ color: '#22c55e', fontSize: '0.72rem', fontWeight: 600 }}>✓ ON</span>
+                        : <span style={{ color: 'var(--text-tertiary)', fontSize: '0.72rem' }}>—</span>}
+                    </td>
+
+                    {/* Actions */}
+                    <td style={cellStyle} onClick={e => e.stopPropagation()}>
+                      <button
+                        onClick={() => setSelectedAccount(acc)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: '0.72rem', fontWeight: 600 }}
+                      >
+                        View →
+                      </button>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {requests.map(req => {
-                    const isPending = req.status === 'pending';
-                    const isApproved = req.status === 'approved';
-                    return (
-                      <tr key={req.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--surface-sunken)]">
-                        <td className="py-2 font-semibold">{req.requester.name}</td>
-                        <td className="py-2 text-[var(--text-secondary)]">{req.project.name}</td>
-                        <td className="py-2 font-mono text-[var(--text-secondary)]">{req.secretScope}</td>
-                        <td className="py-2 text-[var(--text-tertiary)]">
-                          {req.expiresAt ? new Date(req.expiresAt).toLocaleString() : 'Continuous'}
-                        </td>
-                        <td className="py-2">
-                          <span className={`px-1.5 py-0.5 rounded font-semibold text-[10px] ${
-                            isApproved ? 'bg-emerald-500/10 text-emerald-400' : req.status === 'rejected' ? 'bg-red-500/10 text-red-400' : 'bg-amber-500/10 text-amber-400'
-                          }`}>
-                            {req.status}
-                          </span>
-                        </td>
-                        <td className="py-2 text-right space-x-1.5">
-                          {['owner', 'admin'].includes(role) && isPending && (
-                            <>
-                              <button onClick={() => approveMutation.mutate(req.id)} className="t-btn-primary py-0.5 px-2 text-[10px] flex-inline items-center gap-0.5"><CheckCircle size={10} /> Approve</button>
-                              <button onClick={() => rejectMutation.mutate(req.id)} className="t-btn-secondary py-0.5 px-2 text-[10px] text-red-400 hover:bg-red-500/10 border-red-500/20"><XCircle size={10} /> Reject</button>
-                            </>
-                          )}
-                          {isApproved && (
-                            <button onClick={() => revokeMutation.mutate(req.id)} className="text-red-400 hover:text-red-300 font-semibold">Revoke Access</button>
-                          )}
-                          {!isPending && !isApproved && <span className="text-[var(--text-tertiary)]">—</span>}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          ) : <p className="text-xs italic text-[var(--text-tertiary)] py-4">No access requests logged</p>}
+                );
+              })}
+            </tbody>
+          </table>
         </div>
-      )}
+      </div>
 
-      {/* ─── Tab 3: Pending Rotations Queue ─── */}
-      {activeSubTab === 'rotation' && (
-        <div className="t-card p-5 space-y-4">
-          <div>
-            <p className="font-bold text-sm text-[var(--text-primary)]">Pending Credentials Rotations Queue</p>
-            <p className="text-xs text-[var(--text-tertiary)]">Secrets requiring rotation following project completions.</p>
-          </div>
-
-          {rotationTasks && rotationTasks.length > 0 ? (
-            <div className="space-y-3">
-              {rotationTasks.map(task => (
-                <div key={task.id} className="p-4 rounded-lg bg-[var(--surface-sunken)] border border-[var(--border-subtle)] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-xs">
+      {/* Account Detail Slide-over */}
+      {selectedAccount && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 200,
+          background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)',
+          display: 'flex', justifyContent: 'flex-end',
+        }} onClick={() => setSelectedAccount(null)}>
+          <div
+            style={{
+              width: 560, height: '100%', overflowY: 'auto',
+              background: 'var(--surface-base)',
+              borderLeft: '1px solid var(--border-subtle)',
+              padding: '1.5rem',
+              animation: 'slideInRight 250ms ease',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                  <div style={{
+                    width: 36, height: 36, borderRadius: 10,
+                    background: `${catColor(selectedAccount.technology.category)}18`,
+                    color: catColor(selectedAccount.technology.category),
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    {CAT_ICON[selectedAccount.technology.category] || <Globe size={16} />}
+                  </div>
                   <div>
-                    <span className="font-bold uppercase text-[9px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 mr-2">
-                      Rotation Required
-                    </span>
-                    <span className="font-bold text-[var(--text-primary)]">{task.collection.project.name}</span>
-                    <p className="text-[10px] text-[var(--text-tertiary)] mt-1">Reason: {task.reason || 'Project finished'}</p>
-                    {task.snoozedUntil && (
-                      <p className="text-[10px] text-amber-400 mt-0.5">Snoozed until: {new Date(task.snoozedUntil).toLocaleDateString()}</p>
+                    <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>{selectedAccount.accountName}</h3>
+                    <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--text-tertiary)' }}>{selectedAccount.technology.name} · {selectedAccount.technology.category}</p>
+                  </div>
+                </div>
+              </div>
+              <button onClick={() => setSelectedAccount(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)' }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Status badges */}
+            <div style={{ display: 'flex', gap: 6, marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+              <Badge label={selectedAccount.subscriptionStatus} color={selectedAccount.subscriptionStatus === 'active' ? '#22c55e' : '#ef4444'} />
+              {selectedAccount.isLifetime && <Badge label="Lifetime" color="#6366f1" />}
+              {selectedAccount.twoFactorEnabled && <Badge label="2FA Active" color="#22c55e" />}
+              <Badge label={selectedAccount.ownerType === 'agency' ? 'Agency-owned' : 'Client-owned'} color="#94a3b8" />
+            </div>
+
+            {/* Subscription info */}
+            {(selectedAccount.billingCycle || selectedAccount.subscriptionPlan) && (
+              <div style={{ background: 'var(--surface-sunken)', borderRadius: 10, padding: '0.85rem', marginBottom: '1rem' }}>
+                <div style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Subscription</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  {selectedAccount.subscriptionPlan && <div><div style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)' }}>Plan</div><div style={{ fontSize: '0.78rem', fontWeight: 600 }}>{selectedAccount.subscriptionPlan}</div></div>}
+                  {selectedAccount.billingCycle && <div><div style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)' }}>Billing Cycle</div><div style={{ fontSize: '0.78rem', fontWeight: 600, textTransform: 'capitalize' }}>{selectedAccount.billingCycle}</div></div>}
+                  {selectedAccount.billingAmount && <div><div style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)' }}>Amount</div><div style={{ fontSize: '0.78rem', fontWeight: 600 }}>{selectedAccount.billingCurrency || 'USD'} {selectedAccount.billingAmount.toLocaleString()}</div></div>}
+                  {selectedAccount.nextBillingDate && !selectedAccount.isLifetime && <div><div style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)' }}>Next Renewal</div><div style={{ fontSize: '0.78rem', fontWeight: 600 }}>{new Date(selectedAccount.nextBillingDate).toLocaleDateString()}</div></div>}
+                </div>
+              </div>
+            )}
+
+            {/* Linked projects */}
+            {selectedAccount.projectLinks.length > 0 && (
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Linked Projects</div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {selectedAccount.projectLinks.map(pl => (
+                    <Badge key={pl.project.id} label={pl.project.name} color="#6366f1" />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Environments */}
+            {selectedAccount.environments.length > 0 && (
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Environments</div>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+                  {selectedAccount.environments.map(env => (
+                    <button key={env.id} onClick={() => setActiveEnvTab(env.id)} style={{
+                      padding: '4px 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                      background: activeEnvTab === env.id ? 'var(--accent)' : 'var(--surface-sunken)',
+                      color: activeEnvTab === env.id ? '#fff' : 'var(--text-secondary)',
+                      fontSize: '0.72rem', fontWeight: 600,
+                    }}>
+                      {env.environmentName}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Credential Fields */}
+            <div style={{ marginBottom: '1rem' }}>
+              <div style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Credentials</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {selectedAccount.fields.filter(f => !activeEnvTab || f.environmentId === activeEnvTab || !f.environmentId).map(field => (
+                  <div key={field.id} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '0.6rem 0.85rem',
+                    background: 'var(--surface-sunken)', borderRadius: 8,
+                    border: '1px solid var(--border-subtle)',
+                  }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', marginBottom: 2 }}>{field.fieldLabel}</div>
+                      {field.isSecret ? (
+                        revealedFields[field.id]
+                          ? <div style={{ fontSize: '0.8rem', fontFamily: 'monospace', color: '#22c55e', wordBreak: 'break-all' }}>{revealedFields[field.id]}</div>
+                          : <div style={{ fontSize: '0.8rem', letterSpacing: 3, color: 'var(--text-tertiary)' }}>••••••••</div>
+                      ) : (
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-primary)', wordBreak: 'break-all' }}>{field.nonSecretValue || '—'}</div>
+                      )}
+                    </div>
+                    {field.isSecret && (
+                      <button
+                        onClick={() => revealedFields[field.id] ? setRevealedFields(r => { const n = { ...r }; delete n[field.id]; return n; }) : revealField(field.id)}
+                        style={{
+                          background: 'none', border: 'none', cursor: 'pointer',
+                          color: revealedFields[field.id] ? '#ef4444' : 'var(--accent)',
+                          display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.7rem', fontWeight: 600, flexShrink: 0, marginLeft: 8,
+                        }}
+                      >
+                        {revealedFields[field.id] ? <><EyeOff size={13} /> Hide</> : <><Eye size={13} /> Reveal</>}
+                      </button>
                     )}
                   </div>
-
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() => {
-                        setRotatingTaskId(task.id);
-                        setRotateOpen(true);
-                      }}
-                      className="t-btn-primary py-1 px-3 text-xs flex items-center gap-1"
-                    >
-                      <RotateCcw size={12} /> Rotate Now
-                    </button>
-                    <button
-                      onClick={() => {
-                        setSnoozingTaskId(task.id);
-                        setSnoozeOpen(true);
-                      }}
-                      className="t-btn-secondary py-1 px-3 text-xs flex items-center gap-1"
-                    >
-                      <Clock size={12} /> Defer / Snooze
-                    </button>
+                ))}
+                {selectedAccount.fields.length === 0 && (
+                  <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.78rem' }}>
+                    No credentials added yet
                   </div>
-                </div>
-              ))}
+                )}
+              </div>
             </div>
-          ) : (
-            <div className="t-empty py-8 text-xs">
-              <ShieldCheck className="h-10 w-10 text-emerald-500 mb-2" />
-              <span>All completed projects have been fully rotated. No tasks pending!</span>
-            </div>
-          )}
+
+            {/* Tags */}
+            {selectedAccount.tags?.length > 0 && (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {selectedAccount.tags.map(tag => <Badge key={tag} label={tag} color="#94a3b8" />)}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
-      {/* Decrypt Password Confirmation Modal */}
-      <Dialog open={revealOpen} onOpenChange={setRevealOpen}>
-        <DialogContent style={dialogStyle}>
-          <DialogHeader><DialogTitle style={{ color: 'var(--text-primary)' }}>Re-authenticate Reveal Action</DialogTitle></DialogHeader>
-          <p className="text-xs text-[var(--text-secondary)]">Please confirm your account login password before revealing plaintext credentials.</p>
-          <ErrBanner msg={revealError} />
-          <form onSubmit={handleRevealSubmit} className="space-y-4 pt-2">
-            <Field label="Confirm Password *">
-              <input type="password" className={inputCls} placeholder="••••••••" value={revealPassword} onChange={e => setRevealPassword(e.target.value)} required />
-            </Field>
-            <div className="flex justify-end gap-2"><button type="button" className="t-btn-ghost text-sm" onClick={() => setRevealOpen(false)}>Cancel</button><button type="submit" className="t-btn-primary text-sm">Decrypted Reveal</button></div>
-          </form>
-        </DialogContent>
-      </Dialog>
+      {/* Add Technology Account Modal */}
+      {showAddForm && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => setShowAddForm(false)}>
+          <div style={{ width: 540, maxHeight: '85vh', overflowY: 'auto', background: 'var(--surface-base)', borderRadius: 16, padding: '1.5rem', border: '1px solid var(--border-subtle)' }}
+            onClick={e => e.stopPropagation()}>
+            <h3 style={{ margin: '0 0 1rem', fontSize: '1rem', fontWeight: 700 }}>Add Technology Account</h3>
 
-      {/* Rotate Credentials Modal */}
-      <Dialog open={rotateOpen} onOpenChange={setRotateOpen}>
-        <DialogContent style={dialogStyle}>
-          <DialogHeader><DialogTitle style={{ color: 'var(--text-primary)' }}>Rotate Project Credentials</DialogTitle></DialogHeader>
-          <p className="text-xs text-[var(--text-secondary)]">Supply the new credentials to verify, update, and resolve the rotation warning alert.</p>
-          <form onSubmit={e => { e.preventDefault(); completeRotationMutation.mutate({ taskId: rotatingTaskId!, val: newSecretVal }); }} className="space-y-4 pt-2">
-            <Field label="New Plaintext Password / Secret Key *">
-              <input type="password" className={inputCls} placeholder="Type new secret value..." value={newSecretVal} onChange={e => setNewSecretVal(e.target.value)} required />
-            </Field>
-            <div className="flex justify-end gap-2"><button type="button" className="t-btn-ghost text-sm" onClick={() => setRotateOpen(false)}>Cancel</button><button type="submit" className="t-btn-primary text-sm">Complete Rotation</button></div>
-          </form>
-        </DialogContent>
-      </Dialog>
+            {/* Technology search */}
+            {!selectedTech ? (
+              <>
+                <div style={{ position: 'relative', marginBottom: '0.75rem' }}>
+                  <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
+                  <input
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    placeholder="Search technology (GitHub, AWS, Stripe…)"
+                    style={{ width: '100%', padding: '0.5rem 0.75rem 0.5rem 2rem', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--surface-sunken)', color: 'var(--text-primary)', fontSize: '0.8rem' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 300, overflowY: 'auto' }}>
+                  {catalogue.filter(t => !search || t.name.toLowerCase().includes(search.toLowerCase()) || t.category.toLowerCase().includes(search.toLowerCase())).map(tech => (
+                    <button key={tech.id} onClick={() => setSelectedTech(tech)} style={{
+                      display: 'flex', alignItems: 'center', gap: 10, padding: '0.6rem 0.85rem',
+                      background: 'var(--surface-sunken)', border: '1px solid var(--border-subtle)',
+                      borderRadius: 8, cursor: 'pointer', textAlign: 'left',
+                      color: 'var(--text-primary)', transition: 'all 150ms',
+                    }}>
+                      <div style={{ width: 28, height: 28, borderRadius: 8, background: `${catColor(tech.category)}18`, color: catColor(tech.category), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        {CAT_ICON[tech.category] || <Globe size={13} />}
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: '0.82rem' }}>{tech.name}</div>
+                        <div style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)' }}>{tech.category}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.6rem 0.85rem', background: 'var(--surface-sunken)', borderRadius: 8, marginBottom: '1rem' }}>
+                  <div style={{ width: 28, height: 28, borderRadius: 8, background: `${catColor(selectedTech.category)}18`, color: catColor(selectedTech.category), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {CAT_ICON[selectedTech.category] || <Globe size={13} />}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{selectedTech.name}</div>
+                    <div style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)' }}>{selectedTech.category}</div>
+                  </div>
+                  <button onClick={() => { setSelectedTech(null); setFieldValues({}); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)' }}><X size={14} /></button>
+                </div>
 
-      {/* Snooze/Defer Modal */}
-      <Dialog open={snoozeOpen} onOpenChange={setSnoozeOpen}>
-        <DialogContent style={dialogStyle}>
-          <DialogHeader><DialogTitle style={{ color: 'var(--text-primary)' }}>Postpone Credentials Rotation</DialogTitle></DialogHeader>
-          <p className="text-xs text-[var(--text-secondary)]">Defer credential changes by postponing rotation tasks. Enter duration and reason.</p>
-          <form onSubmit={triggerSnooze} className="space-y-4 pt-2">
-            <Field label="Defer Duration (Days)">
-              <select className={inputCls} style={{ background: 'var(--surface-card)', color: 'var(--text-primary)' }} value={snoozeDays} onChange={e => setSqueezeDays(e.target.value) /* custom setter */}>
-                <option value="1">1 Day</option>
-                <option value="3">3 Days</option>
-                <option value="7">7 Days (Default)</option>
-                <option value="14">14 Days</option>
-              </select>
-            </Field>
-            <Field label="Reason for Postponement">
-              <input className={inputCls} placeholder="API client integration not ready, scheduling migration..." value={snoozeReason} onChange={e => setSnoozeReason(e.target.value)} required />
-            </Field>
-            <div className="flex justify-end gap-2"><button type="button" className="t-btn-ghost text-sm" onClick={() => setSnoozeOpen(false)}>Cancel</button><button type="submit" className="t-btn-primary text-sm">Snooze Task</button></div>
-          </form>
-        </DialogContent>
-      </Dialog>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginBottom: '1rem' }}>
+                  <label style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Account Name *</label>
+                  <input value={newAccount.accountName || ''} onChange={e => setNewAccount((a: any) => ({ ...a, accountName: e.target.value }))} placeholder={`e.g. ${selectedTech.name} - Main`}
+                    style={{ padding: '0.45rem 0.75rem', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--surface-sunken)', color: 'var(--text-primary)', fontSize: '0.8rem' }} />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem', marginBottom: '1rem' }}>
+                  <div>
+                    <label style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Billing Cycle</label>
+                    <select value={newAccount.billingCycle || ''} onChange={e => setNewAccount((a: any) => ({ ...a, billingCycle: e.target.value, isLifetime: e.target.value === 'lifetime' }))}
+                      style={{ width: '100%', padding: '0.45rem 0.75rem', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--surface-sunken)', color: 'var(--text-primary)', fontSize: '0.78rem', marginTop: 4 }}>
+                      <option value="">— None —</option>
+                      <option value="monthly">Monthly</option>
+                      <option value="yearly">Yearly</option>
+                      <option value="quarterly">Quarterly</option>
+                      <option value="lifetime">Lifetime</option>
+                      <option value="trial">Trial</option>
+                      <option value="one_time">One-time</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Billing Amount</label>
+                    <input value={newAccount.billingAmount || ''} onChange={e => setNewAccount((a: any) => ({ ...a, billingAmount: e.target.value }))} placeholder="0.00" type="number"
+                      style={{ width: '100%', padding: '0.45rem 0.75rem', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--surface-sunken)', color: 'var(--text-primary)', fontSize: '0.78rem', marginTop: 4 }} />
+                  </div>
+                </div>
+
+                {/* Technology field definitions */}
+                <div style={{ marginBottom: '1rem' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>
+                    Credentials <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(leave blank to add later)</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {(selectedTech.fieldDefinitions || []).sort((a, b) => a.displayOrder - b.displayOrder).map(fd => (
+                      <div key={fd.fieldKey}>
+                        <label style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>
+                          {fd.fieldLabel} {fd.isRequired && <span style={{ color: '#ef4444' }}>*</span>}
+                          {fd.isSecret && <Lock size={10} style={{ marginLeft: 4, color: '#f59e0b', verticalAlign: 'middle' }} />}
+                        </label>
+                        {fd.fieldType === 'textarea' ? (
+                          <textarea value={fieldValues[fd.fieldKey] || ''} onChange={e => setFieldValues(v => ({ ...v, [fd.fieldKey]: e.target.value }))} rows={3}
+                            style={{ width: '100%', padding: '0.4rem 0.7rem', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--surface-sunken)', color: 'var(--text-primary)', fontSize: '0.78rem', resize: 'vertical', marginTop: 2, fontFamily: fd.isSecret ? 'monospace' : 'inherit' }} />
+                        ) : (
+                          <input
+                            type={fd.fieldType === 'password' ? 'password' : fd.fieldType === 'boolean' ? 'checkbox' : 'text'}
+                            value={fieldValues[fd.fieldKey] || ''}
+                            onChange={e => setFieldValues(v => ({ ...v, [fd.fieldKey]: e.target.value }))}
+                            style={{ width: '100%', padding: '0.4rem 0.7rem', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--surface-sunken)', color: 'var(--text-primary)', fontSize: '0.78rem', marginTop: 2, fontFamily: fd.isSecret ? 'monospace' : 'inherit' }}
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                  <button onClick={() => setShowAddForm(false)} style={{ padding: '0.5rem 1rem', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.8rem' }}>Cancel</button>
+                  <button onClick={createAccount} disabled={loading || !newAccount.accountName} style={{
+                    padding: '0.5rem 1rem', borderRadius: 8, border: 'none',
+                    background: loading ? 'var(--surface-sunken)' : 'var(--accent)', color: '#fff', cursor: loading ? 'not-allowed' : 'pointer', fontSize: '0.8rem', fontWeight: 600,
+                  }}>
+                    {loading ? 'Saving…' : 'Save Account'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
-
-  // custom setter
-  function setSqueezeDays(val: string) {
-    setSounceVal(val);
-  }
-  function setSounceVal(val: string) {
-    setSnoozeDays(val);
-  }
 }
 
-function ErrBanner({ msg }: { msg: string }) {
-  return msg ? (
-    <div className="flex items-center gap-2 text-xs p-2.5 rounded-md" style={{ background: 'rgba(243,195,178,0.2)', border: '1px solid var(--accent-warning)', color: 'var(--accent-warning-fg)', borderRadius: 'var(--radius-sm)' }}>
-      <AlertTriangle className="h-4 w-4 shrink-0" />
-      {msg}
+/* ─── Access Requests Tab ────────────────────────────────── */
+function AccessRequestsTab({ user }: { user: any }) {
+  const [requests, setRequests] = useState<AccessRequest[]>([]);
+  const [selected, setSelected] = useState<AccessRequest | null>(null);
+  const [approvals, setApprovals] = useState<Record<string, boolean>>({});
+  const [rejectReason, setRejectReason] = useState('');
+  const [statusFilter, setStatusFilter] = useState('pending');
+  const [loading, setLoading] = useState(false);
+  const isOwner = ['owner', 'admin'].includes(user?.role);
+
+  const load = useCallback(() => {
+    const params = statusFilter ? `?status=${statusFilter}` : '';
+    api.get(`/vault/field-access-requests${params}`).then(r => setRequests(r.data || []));
+  }, [statusFilter]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const approve = async () => {
+    if (!selected) return;
+    setLoading(true);
+    try {
+      const approvalList = selected.requestedFields.map(rf => ({
+        fieldId: rf.accountFieldId,
+        canReveal: approvals[rf.accountFieldId] !== false,
+        canCopy: false,
+        singleUse: false,
+      }));
+      await api.post(`/vault/field-access-requests/${selected.id}/approve`, { approvals: approvalList });
+      setSelected(null);
+      load();
+    } catch (e: any) {
+      alert(e.response?.data?.message || 'Approval failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const reject = async () => {
+    if (!selected || !rejectReason) return;
+    setLoading(true);
+    try {
+      await api.post(`/vault/field-access-requests/${selected.id}/reject`, { reason: rejectReason });
+      setSelected(null);
+      load();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const urgencyColor = (u: string) => ({ critical: '#ef4444', high: '#f59e0b', normal: '#6366f1' })[u] || '#6366f1';
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      {/* Filter row */}
+      <div style={{ display: 'flex', gap: 8 }}>
+        {['pending', 'approved', 'partial', 'rejected', 'revoked', ''].map(s => (
+          <button key={s} onClick={() => setStatusFilter(s)} style={{
+            padding: '0.4rem 0.85rem', borderRadius: 8, border: 'none', cursor: 'pointer',
+            background: statusFilter === s ? 'var(--accent)' : 'var(--surface-sunken)',
+            color: statusFilter === s ? '#fff' : 'var(--text-secondary)',
+            fontSize: '0.75rem', fontWeight: 600, textTransform: 'capitalize',
+          }}>
+            {s || 'All'}
+          </button>
+        ))}
+      </div>
+
+      {requests.length === 0 ? (
+        <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.82rem' }}>
+          <Shield size={40} style={{ opacity: 0.3, display: 'block', margin: '0 auto 12px' }} />
+          No {statusFilter} access requests
+        </div>
+      ) : requests.map(req => (
+        <div key={req.id} style={{
+          background: 'var(--surface-card)', borderRadius: 12,
+          border: '1px solid var(--border-subtle)',
+          padding: '1rem',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <Badge label={req.urgency} color={urgencyColor(req.urgency)} />
+                <Badge
+                  label={req.status}
+                  color={req.status === 'approved' ? '#22c55e' : req.status === 'rejected' ? '#ef4444' : req.status === 'pending' ? '#f59e0b' : '#6366f1'}
+                />
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>{new Date(req.requestedAt).toLocaleDateString()}</span>
+              </div>
+              <div style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: 4 }}>
+                {req.technologyAccount.technology.name} — {req.technologyAccount.accountName}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: 8, lineHeight: 1.5 }}>
+                {req.requestReason}
+              </div>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {req.requestedFields.map(rf => (
+                  <span key={rf.id} style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                    padding: '2px 8px', borderRadius: 6,
+                    background: rf.approved ? '#22c55e18' : 'var(--surface-sunken)',
+                    color: rf.approved ? '#22c55e' : 'var(--text-secondary)',
+                    fontSize: '0.68rem', fontWeight: 500,
+                    border: '1px solid var(--border-subtle)',
+                  }}>
+                    {rf.approved ? <Check size={10} /> : <Lock size={10} />}
+                    {rf.accountField?.fieldLabel || rf.accountFieldId}
+                  </span>
+                ))}
+              </div>
+            </div>
+            {isOwner && req.status === 'pending' && (
+              <button onClick={() => {
+                setSelected(req);
+                const initApprovals: Record<string, boolean> = {};
+                req.requestedFields.forEach(f => { initApprovals[f.accountFieldId] = true; });
+                setApprovals(initApprovals);
+              }} style={{
+                padding: '0.45rem 0.9rem', borderRadius: 8, border: 'none', cursor: 'pointer',
+                background: 'var(--accent)', color: '#fff', fontSize: '0.75rem', fontWeight: 600, flexShrink: 0,
+              }}>
+                Review
+              </button>
+            )}
+          </div>
+        </div>
+      ))}
+
+      {/* Review modal */}
+      {selected && isOwner && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => setSelected(null)}>
+          <div style={{ width: 500, background: 'var(--surface-base)', borderRadius: 16, padding: '1.5rem', border: '1px solid var(--border-subtle)', maxHeight: '80vh', overflowY: 'auto' }}
+            onClick={e => e.stopPropagation()}>
+            <h3 style={{ margin: '0 0 1rem', fontSize: '1rem', fontWeight: 700, display: 'flex', justifyContent: 'space-between' }}>
+              Review Access Request
+              <button onClick={() => setSelected(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)' }}><X size={18} /></button>
+            </h3>
+
+            <div style={{ background: 'var(--surface-sunken)', borderRadius: 10, padding: '0.85rem', marginBottom: '1rem' }}>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', marginBottom: 4 }}>Reason</div>
+              <div style={{ fontSize: '0.82rem', color: 'var(--text-primary)', lineHeight: 1.5 }}>{selected.requestReason}</div>
+              {selected.taskReference && <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', marginTop: 6 }}>Task ref: {selected.taskReference}</div>}
+            </div>
+
+            <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 10 }}>
+              Approve / reject individual fields:
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: '1rem' }}>
+              {selected.requestedFields.map(rf => (
+                <div key={rf.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.5rem 0.75rem', background: 'var(--surface-sunken)', borderRadius: 8 }}>
+                  <div>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 600 }}>{rf.accountField?.fieldLabel}</div>
+                    <div style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)' }}>{rf.accountField?.isSecret ? 'Secret field' : 'Non-secret'}</div>
+                  </div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={approvals[rf.accountFieldId] !== false} onChange={e => setApprovals(a => ({ ...a, [rf.accountFieldId]: e.target.checked }))} />
+                    <span style={{ fontSize: '0.72rem', color: approvals[rf.accountFieldId] !== false ? '#22c55e' : '#ef4444', fontWeight: 600 }}>
+                      {approvals[rf.accountFieldId] !== false ? 'Approve' : 'Deny'}
+                    </span>
+                  </label>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: '1rem' }}>
+              <label style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Rejection reason (if rejecting)</label>
+              <textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} rows={2} placeholder="Reason for rejection…"
+                style={{ padding: '0.45rem 0.75rem', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--surface-sunken)', color: 'var(--text-primary)', fontSize: '0.78rem', resize: 'vertical' }} />
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={reject} disabled={loading || !rejectReason} style={{ padding: '0.5rem 1rem', borderRadius: 8, border: '1px solid #ef4444', background: 'transparent', color: '#ef4444', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}>
+                Reject
+              </button>
+              <button onClick={approve} disabled={loading} style={{ padding: '0.5rem 1rem', borderRadius: 8, border: 'none', background: 'var(--accent)', color: '#fff', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}>
+                {loading ? 'Saving…' : 'Approve Selected'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
-  ) : null;
+  );
+}
+
+/* ─── Employee Access Registry Tab ───────────────────────── */
+function EmployeeRegistryTab() {
+  const [grants, setGrants] = useState<Grant[]>([]);
+  const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    // Load all active grants via search
+    api.get('/vault/field-access-requests?status=approved').then(r => {
+      // Flatten requestedFields into individual grants for display
+      const items: any[] = [];
+      (r.data || []).forEach((req: any) => {
+        (req.requestedFields || []).filter((rf: any) => rf.approved).forEach((rf: any) => {
+          items.push({
+            id: rf.id,
+            employeeId: req.requesterId,
+            projectId: req.projectId,
+            technologyAccount: req.technologyAccount,
+            accountField: rf.accountField,
+            grantedAt: req.reviewedAt || req.requestedAt,
+            expiresAt: req.expiresAt,
+            status: req.status,
+            canReveal: rf.canReveal,
+            canCopy: rf.canCopy,
+          });
+        });
+      });
+      setGrants(items);
+    });
+  }, []);
+
+  const filtered = grants.filter(g => {
+    const q = search.toLowerCase();
+    return !q || g.technologyAccount?.technology?.name?.toLowerCase().includes(q) || g.accountField?.fieldLabel?.toLowerCase().includes(q);
+  });
+
+  const cellStyle = { padding: '0.6rem 0.75rem', fontSize: '0.75rem', color: 'var(--text-primary)', borderBottom: '1px solid var(--border-subtle)', verticalAlign: 'middle' as const };
+
+  const revokeGrant = async (grantId: string) => {
+    if (!confirm('Revoke this access grant?')) return;
+    try {
+      await api.delete(`/employee-credential-grants/${grantId}`);
+      setGrants(g => g.filter(x => x.id !== grantId));
+    } catch {}
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <div style={{ position: 'relative', maxWidth: 340 }}>
+        <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search employee, technology…"
+          style={{ width: '100%', padding: '0.45rem 0.75rem 0.45rem 2rem', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--surface-sunken)', color: 'var(--text-primary)', fontSize: '0.8rem' }} />
+      </div>
+
+      <div style={{ borderRadius: 12, border: '1px solid var(--border-subtle)', overflow: 'hidden', background: 'var(--surface-card)' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ background: 'var(--surface-sunken)' }}>
+              {['Technology', 'Field', 'Environment', 'Granted', 'Expires', 'Reveal', 'Copy', 'Actions'].map(h => (
+                <th key={h} style={{ padding: '0.5rem 0.75rem', fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid var(--border-subtle)', textAlign: 'left' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 ? (
+              <tr><td colSpan={8} style={{ ...cellStyle, textAlign: 'center', padding: '2rem', color: 'var(--text-tertiary)' }}>No active access grants</td></tr>
+            ) : filtered.map(g => (
+              <tr key={g.id} onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-sunken)')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                <td style={cellStyle}>
+                  <div style={{ fontWeight: 600 }}>{g.technologyAccount?.technology?.name}</div>
+                  <div style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)' }}>{g.technologyAccount?.accountName}</div>
+                </td>
+                <td style={cellStyle}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    {g.accountField?.isSecret && <Lock size={11} style={{ color: '#f59e0b' }} />}
+                    {g.accountField?.fieldLabel}
+                  </div>
+                </td>
+                <td style={cellStyle}><span style={{ color: 'var(--text-tertiary)' }}>—</span></td>
+                <td style={cellStyle}>{g.grantedAt ? new Date(g.grantedAt).toLocaleDateString() : '—'}</td>
+                <td style={cellStyle}>
+                  {g.expiresAt ? (
+                    <span style={{ color: new Date(g.expiresAt) < new Date() ? '#ef4444' : '#f59e0b' }}>
+                      {new Date(g.expiresAt).toLocaleDateString()}
+                    </span>
+                  ) : <Badge label="Permanent" color="#6366f1" />}
+                </td>
+                <td style={cellStyle}>{g.canReveal ? <span style={{ color: '#22c55e', fontWeight: 600 }}>✓</span> : <span style={{ color: 'var(--text-tertiary)' }}>—</span>}</td>
+                <td style={cellStyle}>{g.canCopy ? <span style={{ color: '#22c55e', fontWeight: 600 }}>✓</span> : <span style={{ color: '#ef4444' }}>✗</span>}</td>
+                <td style={cellStyle}>
+                  <button onClick={() => revokeGrant(g.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: '0.7rem', fontWeight: 600 }}>Revoke</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Main Vault Page ────────────────────────────────────── */
+export default function Vault() {
+  const [tab, setTab] = useState<'directory' | 'requests' | 'registry' | 'rotation'>('directory');
+  const [user, setUser] = useState<any>(null);
+  const [requestCount, setRequestCount] = useState(0);
+  const isOwner = ['owner', 'admin'].includes(user?.role);
+
+  useEffect(() => {
+    api.get('/auth/me').then(r => setUser(r.data));
+    api.get('/vault/field-access-requests?status=pending').then(r => setRequestCount((r.data || []).length));
+  }, []);
+
+  return (
+    <div style={{ padding: '1.5rem', maxWidth: 1200, margin: '0 auto' }}>
+      {/* Header */}
+      <div style={{ marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+          <div>
+            <h1 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+              Technology Vault
+            </h1>
+            <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
+              Intelligent credential and technology account directory
+            </p>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: 4, background: 'var(--surface-sunken)', padding: 4, borderRadius: 10, width: 'fit-content', marginTop: '1rem' }}>
+          <TabButton label="Directory" active={tab === 'directory'} onClick={() => setTab('directory')} />
+          {isOwner && <TabButton label="Access Requests" active={tab === 'requests'} onClick={() => setTab('requests')} count={requestCount} />}
+          {isOwner && <TabButton label="Employee Registry" active={tab === 'registry'} onClick={() => setTab('registry')} />}
+          <TabButton label="Rotation Queue" active={tab === 'rotation'} onClick={() => setTab('rotation')} />
+        </div>
+      </div>
+
+      {tab === 'directory' && <TechnologyDirectory user={user} />}
+      {tab === 'requests' && isOwner && <AccessRequestsTab user={user} />}
+      {tab === 'registry' && isOwner && <EmployeeRegistryTab />}
+      {tab === 'rotation' && (
+        <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.82rem' }}>
+          <RefreshCw size={40} style={{ opacity: 0.3, display: 'block', margin: '0 auto 12px' }} />
+          Rotation queue management from the existing Vault module is shown here.
+        </div>
+      )}
+    </div>
+  );
 }
