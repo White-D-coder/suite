@@ -124,6 +124,8 @@ model Project {
   environments          ProjectEnvironment[]
   profitabilitySnapshot ProfitabilitySnapshot?
   expenses              Expense[]
+  technologyLinks       ProjectTechnologyLink[]
+  dispatchEntries       DispatchEntry[]
 }
 
 model ProjectContract {
@@ -310,6 +312,7 @@ model Invoice {
   lineItems           InvoiceLineItem[]
   income              Income[]
   schedules           InvoiceSchedule[]
+  discounts           InvoiceDiscount[]
 
   // Multi-currency operational rules & taxes
   progressBillingMode String?           // "percentage" | "fixed" | "none"
@@ -323,6 +326,13 @@ model Invoice {
   fxTimestamp         DateTime?
   fxMode              String            @default("frozen") // "live" | "frozen"
   taxProfile          String?           // e.g. "inclusive" | "exclusive" | "exempt"
+
+  // Discount fields
+  discountTotal      Decimal            @default(0) @db.Decimal(12, 2)
+  taxableAmount      Decimal            @default(0) @db.Decimal(12, 2)
+  finalPayableAmount Decimal            @default(0) @db.Decimal(12, 2)
+  discountStatus     String?            // "approved" | "pending" | null
+  discountCalcOrder  String             @default("before_tax") // "before_tax" | "after_tax"
 }
 
 model InvoiceSchedule {
@@ -465,4 +475,324 @@ model WebsiteMonitor {
   domainExpiryDate  DateTime?
   hostingExpiryDate DateTime?
   lastCheckedAt     DateTime?
+}
+
+// ─────────────────────────────────────────────────────────
+// INVOICE DISCOUNTS
+// ─────────────────────────────────────────────────────────
+
+model InvoiceDiscount {
+  id               String   @id @default(uuid())
+  invoiceId        String
+  invoice          Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  invoiceItemId    String?
+  discountType     String   // "percentage" | "fixed"
+  discountScope    String   // "invoice" | "line_item"
+  discountValue    Decimal  @db.Decimal(12, 4)
+  calculatedAmount Decimal  @db.Decimal(12, 2)
+
+  purposeCode      String
+  purposeNote      String?  @db.Text
+
+  requestedById    String
+  approvedById     String?
+  approvalStatus   String   @default("approved") // "approved" | "pending" | "rejected"
+  approvedAt       DateTime?
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────────────────
+// TECHNOLOGY VAULT
+// ─────────────────────────────────────────────────────────
+
+model TechnologyCatalogue {
+  id                   String   @id @default(uuid())
+  name                 String   @unique
+  vendor               String?
+  category             String
+  logoUrl              String?
+  officialUrl          String?
+  supportsSubscription Boolean  @default(false)
+  supportsEnvironments Boolean  @default(true)
+  supportsOAuth        Boolean  @default(false)
+  supportsRotation     Boolean  @default(false)
+  active               Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  fieldDefinitions TechnologyFieldDefinition[]
+  accounts         TechnologyAccount[]
+}
+
+model TechnologyFieldDefinition {
+  id           String              @id @default(uuid())
+  technologyId String
+  technology   TechnologyCatalogue @relation(fields: [technologyId], references: [id], onDelete: Cascade)
+
+  fieldKey     String
+  fieldLabel   String
+  fieldType    String   // "text" | "password" | "url" | "textarea" | "boolean" | "date"
+  isSecret     Boolean  @default(false)
+  isRequired   Boolean  @default(false)
+  isRepeatable Boolean  @default(false)
+  displayOrder Int      @default(0)
+
+  createdAt DateTime @default(now())
+}
+
+model TechnologyAccount {
+  id                String   @id @default(uuid())
+  technologyId      String
+  technology        TechnologyCatalogue @relation(fields: [technologyId], references: [id])
+
+  accountName       String
+  accountIdentifier String?
+  ownerType         String   @default("agency") // "agency" | "client" | "shared"
+  ownerUserId       String?
+  clientId          String?
+
+  // Subscription
+  subscriptionPlan  String?
+  billingCycle      String?  // "monthly" | "yearly" | "quarterly" | "lifetime" | "trial" | "one_time"
+  billingAmount     Decimal? @db.Decimal(12, 2)
+  billingCurrency   String?
+  nextBillingDate   DateTime?
+  trialEndDate      DateTime?
+  autoRenewal       Boolean  @default(false)
+  isLifetime        Boolean  @default(false)
+  subscriptionStatus String  @default("active") // "active" | "paused" | "cancelled" | "expired" | "trial"
+  reminderDays      Int[]    @default([30, 7, 1])
+
+  // Credential health
+  lastRotationDate  DateTime?
+  nextRotationDate  DateTime?
+  rotationPolicy    String?
+  twoFactorEnabled  Boolean  @default(false)
+
+  status     String   @default("active") // "active" | "inactive" | "deprecated"
+  notes      String?  @db.Text
+  tags       String[]
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  projectLinks    ProjectTechnologyLink[]
+  environments    TechnologyEnvironment[]
+  fields          TechnologyAccountField[]
+  accessRequests  VaultFieldAccessRequest[]
+  grants          EmployeeCredentialGrant[]
+}
+
+model ProjectTechnologyLink {
+  id                  String            @id @default(uuid())
+  projectId           String
+  technologyAccountId String
+
+  project           Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  technologyAccount TechnologyAccount @relation(fields: [technologyAccountId], references: [id], onDelete: Cascade)
+
+  connectionType String?
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  @@unique([projectId, technologyAccountId])
+}
+
+model TechnologyEnvironment {
+  id                  String            @id @default(uuid())
+  technologyAccountId String
+  technologyAccount   TechnologyAccount @relation(fields: [technologyAccountId], references: [id], onDelete: Cascade)
+
+  environmentName String
+  environmentType String   // "development" | "staging" | "production" | "local" | "sandbox" | "qa"
+  url             String?
+  active          Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  fields TechnologyAccountField[]
+}
+
+model TechnologyAccountField {
+  id                  String            @id @default(uuid())
+  technologyAccountId String
+  technologyAccount   TechnologyAccount @relation(fields: [technologyAccountId], references: [id], onDelete: Cascade)
+
+  environmentId   String?
+  environment     TechnologyEnvironment? @relation(fields: [environmentId], references: [id])
+  fieldKey        String
+  fieldLabel      String
+  encryptedValue  String?
+  nonSecretValue  String?
+  isSecret        Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  grantedAccess EmployeeCredentialGrant[]
+  requestedIn   VaultRequestedField[]
+}
+
+// ─────────────────────────────────────────────────────────
+// FIELD-LEVEL VAULT ACCESS
+// ─────────────────────────────────────────────────────────
+
+model VaultFieldAccessRequest {
+  id                  String            @id @default(uuid())
+  requesterId         String
+  projectId           String
+  technologyAccountId String
+  technologyAccount   TechnologyAccount @relation(fields: [technologyAccountId], references: [id])
+  environmentId       String?
+
+  requestReason        String  @db.Text
+  taskReference        String?
+  urgency              String  @default("normal") // "normal" | "high" | "critical"
+  requestedDurationMin Int?
+
+  status         String    @default("pending") // "pending" | "approved" | "partial" | "rejected" | "revoked" | "expired"
+  requestedAt    DateTime  @default(now())
+  reviewedAt     DateTime?
+  approvedById   String?
+  rejectedReason String?   @db.Text
+  expiresAt      DateTime?
+
+  requestedFields VaultRequestedField[]
+}
+
+model VaultRequestedField {
+  id        String                  @id @default(uuid())
+  requestId String
+  request   VaultFieldAccessRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  accountFieldId String
+  accountField   TechnologyAccountField @relation(fields: [accountFieldId], references: [id])
+
+  requested Boolean  @default(true)
+  approved  Boolean  @default(false)
+  canReveal Boolean  @default(false)
+  canCopy   Boolean  @default(false)
+  singleUse Boolean  @default(false)
+  usedAt    DateTime?
+}
+
+model EmployeeCredentialGrant {
+  id                  String @id @default(uuid())
+  employeeId          String
+  projectId           String
+  technologyAccountId String
+  accountFieldId      String
+  accountField        TechnologyAccountField @relation(fields: [accountFieldId], references: [id])
+  technologyAccount   TechnologyAccount      @relation(fields: [technologyAccountId], references: [id])
+  environmentId       String?
+
+  requestId    String?
+  approvedById String
+
+  canReveal Boolean  @default(true)
+  canCopy   Boolean  @default(false)
+  singleUse Boolean  @default(false)
+  active    Boolean  @default(true)
+
+  grantedAt      DateTime  @default(now())
+  expiresAt      DateTime?
+  revokedAt      DateTime?
+  lastAccessedAt DateTime?
+}
+
+// ─────────────────────────────────────────────────────────
+// AI DISPATCH FEED
+// ─────────────────────────────────────────────────────────
+
+model DispatchEntry {
+  id        String  @id @default(uuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  clientId  String?
+
+  communicationType String // "meeting" | "call" | "email" | "whatsapp" | "slack" | "internal_note" | "transcript" | "status_update"
+  title             String
+  source            String  // "manual" | "google_meet" | "zoom" | "teams" | "phone" | "email" | "whatsapp"
+  sourceReference   String?
+
+  occurredAt      DateTime
+  durationMinutes Int?
+
+  rawContent         String?  @db.Text
+  aiSummary          String?  @db.Text
+  aiConfidence       Decimal? @db.Decimal(5, 2)
+  verificationStatus String   @default("unverified") // "unverified" | "verified" | "needs_review" | "inaccurate"
+
+  sentiment  String? // "positive" | "neutral" | "negative" | "mixed"
+  priority   String  @default("normal") // "low" | "normal" | "high" | "critical"
+  followUpAt DateTime?
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  participants DispatchParticipant[]
+  decisions    DispatchDecision[]
+  actionItems  DispatchActionItem[]
+  tags         DispatchTag[]
+}
+
+model DispatchParticipant {
+  id              String        @id @default(uuid())
+  dispatchEntryId String
+  dispatchEntry   DispatchEntry @relation(fields: [dispatchEntryId], references: [id], onDelete: Cascade)
+
+  participantType String  // "employee" | "client_poc" | "external"
+  userId          String?
+  clientContactId String?
+  displayName     String
+}
+
+model DispatchDecision {
+  id              String        @id @default(uuid())
+  dispatchEntryId String
+  dispatchEntry   DispatchEntry @relation(fields: [dispatchEntryId], references: [id], onDelete: Cascade)
+
+  decisionText String  @db.Text
+  confirmed    Boolean @default(false)
+}
+
+model DispatchActionItem {
+  id              String        @id @default(uuid())
+  dispatchEntryId String
+  dispatchEntry   DispatchEntry @relation(fields: [dispatchEntryId], references: [id], onDelete: Cascade)
+
+  actionText     String    @db.Text
+  assignedUserId String?
+  dueDate        DateTime?
+  status         String    @default("open") // "open" | "in_progress" | "done" | "cancelled"
+  linkedTaskId   String?
+}
+
+model DispatchTag {
+  id              String        @id @default(uuid())
+  dispatchEntryId String
+  dispatchEntry   DispatchEntry @relation(fields: [dispatchEntryId], references: [id], onDelete: Cascade)
+
+  tag String
+}
+
+// ─────────────────────────────────────────────────────────
+// NOTIFICATIONS
+// ─────────────────────────────────────────────────────────
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  type      String   // "credential_request" | "credential_approved" | "credential_expiring" | "subscription_expiring" | "discount_pending" | "dispatch_ready" | "action_assigned" | "invoice_overdue" | "rotation_due"
+  title     String
+  message   String   @db.Text
+  metadata  String?  @db.Text // JSON string for extra context
+  read      Boolean  @default(false)
+  readAt    DateTime?
+  createdAt DateTime @default(now())
 }
