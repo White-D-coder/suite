@@ -1198,46 +1198,279 @@ function DispatchSection({ projectId, role }: { projectId: string; role: string 
 /* ─────────────────────────────────────────────────────────── */
 /* Technology Stack Section                                    */
 /* ─────────────────────────────────────────────────────────── */
+const TECH_CAT_COLORS: Record<string, string> = {
+  'Source Control': '#6366f1',
+  'Cloud Infrastructure': '#f59e0b',
+  'Hosting': '#06b6d4',
+  'Domain and DNS': '#10b981',
+  'Database': '#8b5cf6',
+  'Email': '#ec4899',
+  'Communication': '#3b82f6',
+  'Design': '#f97316',
+  'Project Management': '#14b8a6',
+  'Payment Gateway': '#22c55e',
+  'Artificial Intelligence': '#a78bfa',
+  'Marketing': '#fb923c',
+  'CRM': '#38bdf8',
+  'Security': '#ef4444',
+};
+
 function TechStackSection({ projectId }: { projectId: string }) {
   const [techLinks, setTechLinks] = useState<any[]>([]);
+  const [catalogue, setCatalogue] = useState<any[]>([]);
+  const [open, setOpen] = useState(false);
+  const [selectedTech, setSelectedTech] = useState<any | null>(null);
+  const [accountForm, setAccountForm] = useState({ accountName: '', accountIdentifier: '', environmentName: 'Production', environmentType: 'production', ownerType: 'agency', isLifetime: false, billingCycle: 'monthly', billingAmount: '0.00' });
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const load = () => {
+    api.get(`/vault/project/${projectId}`).then(r => setTechLinks(r.data || []));
+  };
 
   useEffect(() => {
-    api.get(`/vault/project/${projectId}`).then(r => setTechLinks(r.data || []));
+    load();
+    api.get('/technologies').then(r => setCatalogue(r.data || []));
   }, [projectId]);
 
-  if (techLinks.length === 0) return null;
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTech) return;
+    setLoading(true);
+    setError('');
+    try {
+      // 1. Create Technology Account
+      const { data: acct } = await api.post(`/technologies/${selectedTech.id}/accounts`, {
+        accountName: accountForm.accountName,
+        accountIdentifier: accountForm.accountIdentifier || undefined,
+        ownerType: accountForm.ownerType,
+        subscriptionPlan: 'Developer / Pro',
+        billingCycle: accountForm.billingCycle,
+        billingAmount: accountForm.billingAmount ? parseFloat(accountForm.billingAmount) : 0,
+        isLifetime: accountForm.isLifetime,
+        status: 'active',
+      });
+
+      // 2. Create Environment
+      const { data: env } = await api.post(`/technology-accounts/${acct.id}/environments`, {
+        environmentName: accountForm.environmentName,
+        environmentType: accountForm.environmentType,
+        url: `https://${accountForm.environmentType}.${accountForm.accountIdentifier || 'service'}.com`,
+        active: true,
+      });
+
+      // 3. Create Fields
+      const fieldDefs = selectedTech.fieldDefinitions || [];
+      for (const def of fieldDefs) {
+        const val = fieldValues[def.fieldKey];
+        if (val !== undefined && val !== '') {
+          await api.post(`/technology-accounts/${acct.id}/fields`, {
+            fieldKey: def.fieldKey,
+            fieldLabel: def.fieldLabel,
+            isSecret: def.isSecret,
+            environmentId: env.id,
+            value: val,
+          });
+        }
+      }
+
+      // 4. Link to Project
+      await api.post(`/projects/${projectId}/technologies`, {
+        technologyAccountId: acct.id,
+        connectionType: 'primary',
+      });
+
+      // Reset
+      setOpen(false);
+      setSelectedTech(null);
+      setAccountForm({ accountName: '', accountIdentifier: '', environmentName: 'Production', environmentType: 'production', ownerType: 'agency', isLifetime: false, billingCycle: 'monthly', billingAmount: '0.00' });
+      setFieldValues({});
+      load();
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to save and link technology');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div style={{ marginTop: '1rem', background: 'var(--surface-card)', borderRadius: 14, border: '1px solid var(--border-subtle)', overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '1rem 1.25rem', borderBottom: '1px solid var(--border-subtle)', background: 'var(--surface-sunken)' }}>
-        <Layers size={15} style={{ color: 'var(--accent)' }} />
-        <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>Technology Stack</span>
-        <span style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)', background: 'var(--surface-base)', padding: '2px 8px', borderRadius: 99, border: '1px solid var(--border-subtle)' }}>{techLinks.length} linked</span>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.75rem', padding: '1rem' }}>
-        {techLinks.map((link: any) => {
-          const acc = link.technologyAccount;
-          return (
-            <div key={link.id} style={{ background: 'var(--surface-sunken)', borderRadius: 10, border: '1px solid var(--border-subtle)', padding: '0.75rem' }}>
-              <div style={{ fontWeight: 700, fontSize: '0.82rem', color: 'var(--text-primary)', marginBottom: 4 }}>{acc.technology.name}</div>
-              <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', marginBottom: 6 }}>{acc.accountName}</div>
-              {acc.environments.length > 0 && (
-                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                  {acc.environments.map((env: any) => (
-                    <span key={env.id} style={{ fontSize: '0.62rem', padding: '2px 6px', borderRadius: 6, background: 'var(--surface-card)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', textTransform: 'capitalize' }}>
-                      {env.environmentType}
-                    </span>
-                  ))}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', borderBottom: '1px solid var(--border-subtle)', background: 'var(--surface-sunken)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Layers size={15} style={{ color: 'var(--accent)' }} />
+          <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>Technology Stack</span>
+          <span style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)', background: 'var(--surface-base)', padding: '2px 8px', borderRadius: 99, border: '1px solid var(--border-subtle)' }}>{techLinks.length} linked</span>
+        </div>
+
+        <Dialog open={open} onOpenChange={(o) => { setOpen(o); if(!o) setSelectedTech(null); }}>
+          <DialogTrigger asChild>
+            <button onClick={() => setOpen(true)} className="flex items-center justify-center w-7 h-7 rounded t-btn-ghost" style={{ padding: 0 }} aria-label="Add Technology Stack">
+              <Plus size={14} />
+            </button>
+          </DialogTrigger>
+          <DialogContent style={{ background: 'var(--surface-base)', border: '1px solid var(--border-default)', maxWidth: 540, maxHeight: '85vh', overflowY: 'auto' }}>
+            <DialogHeader>
+              <DialogTitle style={{ color: 'var(--text-primary)' }}>
+                {selectedTech ? `Configure ${selectedTech.name}` : 'Add Project Technology'}
+              </DialogTitle>
+            </DialogHeader>
+
+            {error && <div className="text-xs text-red-500 bg-red-500/10 p-2.5 rounded border border-red-500/20">{error}</div>}
+
+            {!selectedTech ? (
+              <div className="space-y-4 pt-2">
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Select a technology stack item to configure and store its credentials:</p>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, maxHeight: 320, overflowY: 'auto' }}>
+                  {catalogue.map((tech: any) => {
+                    const color = TECH_CAT_COLORS[tech.category] || '#6366f1';
+                    return (
+                      <button
+                        key={tech.id}
+                        onClick={() => {
+                          setSelectedTech(tech);
+                          setAccountForm(f => ({ ...f, accountName: `${tech.name} - Project Main` }));
+                        }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 10, padding: '0.5rem 0.75rem',
+                          background: 'var(--surface-card)', border: '1px solid var(--border-subtle)',
+                          borderRadius: 8, cursor: 'pointer', textAlign: 'left',
+                          color: 'var(--text-primary)', transition: 'all 150ms',
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-sunken)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'var(--surface-card)')}
+                      >
+                        <div style={{
+                          width: 28, height: 28, borderRadius: 6,
+                          background: `${color}18`, color,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: '0.7rem', fontWeight: 700, flexShrink: 0
+                        }}>
+                          {tech.name.charAt(0)}
+                        </div>
+                        <div className="truncate">
+                          <div style={{ fontWeight: 600, fontSize: '0.78rem' }}>{tech.name}</div>
+                          <div style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)' }}>{tech.category}</div>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
-              )}
-              <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '0.62rem', padding: '2px 6px', borderRadius: 6, background: acc.status === 'active' ? '#22c55e15' : '#ef444415', color: acc.status === 'active' ? '#22c55e' : '#ef4444', fontWeight: 600 }}>{acc.status}</span>
-                {acc.isLifetime && <span style={{ fontSize: '0.62rem', padding: '2px 6px', borderRadius: 6, background: '#6366f115', color: '#6366f1', fontWeight: 600 }}>∞ Lifetime</span>}
               </div>
-            </div>
-          );
-        })}
+            ) : (
+              <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.5rem 0.75rem', background: 'var(--surface-sunken)', borderRadius: 8 }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-primary)', flex: 1 }}>
+                    Selected: {selectedTech.name} ({selectedTech.category})
+                  </div>
+                  <button type="button" onClick={() => setSelectedTech(null)} style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer' }}>Change</button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Account Name *">
+                    <input className={inputCls} value={accountForm.accountName} onChange={e => setAccountForm({ ...accountForm, accountName: e.target.value })} placeholder="e.g. Stripe Live Dashboard" required />
+                  </Field>
+                  <Field label="Account ID / Username">
+                    <input className={inputCls} value={accountForm.accountIdentifier} onChange={e => setAccountForm({ ...accountForm, accountIdentifier: e.target.value })} placeholder="e.g. account-id-123" />
+                  </Field>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Environment Type">
+                    <select className={inputCls} style={{ background: 'var(--surface-card)', color: 'var(--text-primary)' }} value={accountForm.environmentType} onChange={e => setAccountForm({ ...accountForm, environmentType: e.target.value, environmentName: e.target.value.charAt(0).toUpperCase() + e.target.value.slice(1) })}>
+                      <option value="production">Production</option>
+                      <option value="staging">Staging</option>
+                      <option value="development">Development</option>
+                    </select>
+                  </Field>
+                  <Field label="Owner Type">
+                    <select className={inputCls} style={{ background: 'var(--surface-card)', color: 'var(--text-primary)' }} value={accountForm.ownerType} onChange={e => setAccountForm({ ...accountForm, ownerType: e.target.value })}>
+                      <option value="agency">Agency-owned</option>
+                      <option value="client">Client-owned</option>
+                    </select>
+                  </Field>
+                </div>
+
+                {/* Fields definition inputs */}
+                {selectedTech.fieldDefinitions && selectedTech.fieldDefinitions.length > 0 && (
+                  <div style={{ background: 'var(--surface-sunken)', borderRadius: 10, padding: '1rem', border: '1px solid var(--border-subtle)' }} className="space-y-3">
+                    <p style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Credential Values</p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {selectedTech.fieldDefinitions.map((fd: any) => (
+                        <div key={fd.fieldKey}>
+                          <label style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 2 }}>
+                            {fd.fieldLabel} {fd.isRequired && <span className="text-red-500">*</span>} {fd.isSecret && <span style={{ color: '#f59e0b', fontSize: '0.6rem' }}>(Secret)</span>}
+                          </label>
+                          {fd.fieldType === 'textarea' ? (
+                            <textarea
+                              className={inputCls}
+                              rows={2}
+                              value={fieldValues[fd.fieldKey] || ''}
+                              onChange={e => setFieldValues({ ...fieldValues, [fd.fieldKey]: e.target.value })}
+                              placeholder={`Enter ${fd.fieldLabel}...`}
+                              required={fd.isRequired}
+                            />
+                          ) : (
+                            <input
+                              type={fd.isSecret ? 'password' : 'text'}
+                              className={inputCls}
+                              value={fieldValues[fd.fieldKey] || ''}
+                              onChange={e => setFieldValues({ ...fieldValues, [fd.fieldKey]: e.target.value })}
+                              placeholder={`Enter ${fd.fieldLabel}...`}
+                              required={fd.isRequired}
+                            />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-2 pt-2" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+                  <button type="button" className="t-btn-ghost text-sm" onClick={() => setOpen(false)}>Cancel</button>
+                  <button type="submit" disabled={loading} className="t-btn-primary text-sm px-6">
+                    {loading ? 'Saving...' : 'Save & Link'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <div style={{ padding: '1rem' }}>
+        {techLinks.length === 0 ? (
+          <div className="t-empty py-4 text-xs italic text-[var(--text-tertiary)]" style={{ textAlign: 'center' }}>
+            No linked technology accounts. Click '+' to add one.
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.75rem' }}>
+            {techLinks.map((link: any) => {
+              const acc = link.technologyAccount;
+              return (
+                <div key={link.id} style={{ background: 'var(--surface-sunken)', borderRadius: 10, border: '1px solid var(--border-subtle)', padding: '0.75rem' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.82rem', color: 'var(--text-primary)', marginBottom: 4 }}>{acc.technology.name}</div>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', marginBottom: 6 }}>{acc.accountName}</div>
+                  {acc.environments.length > 0 && (
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                      {acc.environments.map((env: any) => (
+                        <span key={env.id} style={{ fontSize: '0.62rem', padding: '2px 6px', borderRadius: 6, background: 'var(--surface-card)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', textTransform: 'capitalize' }}>
+                          {env.environmentType}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '0.62rem', padding: '2px 6px', borderRadius: 6, background: acc.status === 'active' ? '#22c55e15' : '#ef444415', color: acc.status === 'active' ? '#22c55e' : '#ef4444', fontWeight: 600 }}>{acc.status}</span>
+                    {acc.isLifetime && <span style={{ fontSize: '0.62rem', padding: '2px 6px', borderRadius: 6, background: '#6366f115', color: '#6366f1', fontWeight: 600 }}>∞ Lifetime</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
 }
+

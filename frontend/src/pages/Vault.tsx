@@ -398,7 +398,10 @@ function TechnologyDirectory({ user }: { user: any }) {
                   <tr key={acc.id} style={{ cursor: 'pointer', transition: 'background 100ms' }}
                     onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-sunken)')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                    onClick={() => setSelectedAccount(acc)}
+                    onClick={() => {
+                      setSelectedAccount(acc);
+                      setActiveEnvTab(acc.environments[0]?.id || '');
+                    }}
                   >
                     {/* Technology */}
                     <td style={cellStyle}>
@@ -480,7 +483,10 @@ function TechnologyDirectory({ user }: { user: any }) {
                     {/* Actions */}
                     <td style={cellStyle} onClick={e => e.stopPropagation()}>
                       <button
-                        onClick={() => setSelectedAccount(acc)}
+                        onClick={() => {
+                          setSelectedAccount(acc);
+                          setActiveEnvTab(acc.environments[0]?.id || '');
+                        }}
                         style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: '0.72rem', fontWeight: 600 }}
                       >
                         View →
@@ -504,7 +510,7 @@ function TechnologyDirectory({ user }: { user: any }) {
           <div
             style={{
               width: 560, height: '100%', overflowY: 'auto',
-              background: 'var(--surface-base)',
+              background: 'var(--surface-card)',
               borderLeft: '1px solid var(--border-subtle)',
               padding: '1.5rem',
               animation: 'slideInRight 250ms ease',
@@ -523,7 +529,7 @@ function TechnologyDirectory({ user }: { user: any }) {
                     {CAT_ICON[selectedAccount.technology.category] || <Globe size={16} />}
                   </div>
                   <div>
-                    <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>{selectedAccount.accountName}</h3>
+                    <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{selectedAccount.accountName}</h3>
                     <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--text-tertiary)' }}>{selectedAccount.technology.name} · {selectedAccount.technology.category}</p>
                   </div>
                 </div>
@@ -546,10 +552,10 @@ function TechnologyDirectory({ user }: { user: any }) {
               <div style={{ background: 'var(--surface-sunken)', borderRadius: 10, padding: '0.85rem', marginBottom: '1rem' }}>
                 <div style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Subscription</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                  {selectedAccount.subscriptionPlan && <div><div style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)' }}>Plan</div><div style={{ fontSize: '0.78rem', fontWeight: 600 }}>{selectedAccount.subscriptionPlan}</div></div>}
-                  {selectedAccount.billingCycle && <div><div style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)' }}>Billing Cycle</div><div style={{ fontSize: '0.78rem', fontWeight: 600, textTransform: 'capitalize' }}>{selectedAccount.billingCycle}</div></div>}
-                  {selectedAccount.billingAmount && <div><div style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)' }}>Amount</div><div style={{ fontSize: '0.78rem', fontWeight: 600 }}>{selectedAccount.billingCurrency || 'USD'} {selectedAccount.billingAmount.toLocaleString()}</div></div>}
-                  {selectedAccount.nextBillingDate && !selectedAccount.isLifetime && <div><div style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)' }}>Next Renewal</div><div style={{ fontSize: '0.78rem', fontWeight: 600 }}>{new Date(selectedAccount.nextBillingDate).toLocaleDateString()}</div></div>}
+                  {selectedAccount.subscriptionPlan && <div><div style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)' }}>Plan</div><div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-primary)' }}>{selectedAccount.subscriptionPlan}</div></div>}
+                  {selectedAccount.billingCycle && <div><div style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)' }}>Billing Cycle</div><div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-primary)', textTransform: 'capitalize' }}>{selectedAccount.billingCycle}</div></div>}
+                  {selectedAccount.billingAmount !== undefined && <div><div style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)' }}>Amount</div><div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-primary)' }}>{selectedAccount.billingCurrency || 'USD'} {selectedAccount.billingAmount.toLocaleString()}</div></div>}
+                  {selectedAccount.nextBillingDate && !selectedAccount.isLifetime && <div><div style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)' }}>Next Renewal</div><div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-primary)' }}>{new Date(selectedAccount.nextBillingDate).toLocaleDateString()}</div></div>}
                 </div>
               </div>
             )}
