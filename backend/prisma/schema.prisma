@@ -630,6 +630,10 @@ model TechnologyAccountField {
   nonSecretValue  String?
   isSecret        Boolean  @default(false)
 
+  notes           String?  @db.Text
+  expiresAt       DateTime?
+  isLifetime      Boolean  @default(true)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

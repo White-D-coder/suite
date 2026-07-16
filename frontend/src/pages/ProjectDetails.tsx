@@ -80,7 +80,18 @@ export default function ProjectDetails() {
   const [contractError, setContractError] = useState('');
 
   const [envOpen, setEnvOpen] = useState(false);
-  const [envForm, setEnvForm] = useState({ name: 'development', url: '' });
+  const [envForm, setEnvForm] = useState({ name: 'production', url: '' });
+  const [envWizardStep, setEnvWizardStep] = useState<1|2|3>(1);
+  const [envCatalogueSearch, setEnvCatalogueSearch] = useState('');
+  const [envCatalogue, setEnvCatalogue] = useState<any[]>([]);
+  const [envSelectedTechs, setEnvSelectedTechs] = useState<any[]>([]);
+  const [envFieldValues, setEnvFieldValues] = useState<Record<string, Record<string, string>>>({});
+  const [envFieldNotes, setEnvFieldNotes] = useState<Record<string, Record<string, string>>>({});
+  const [envFieldExpiry, setEnvFieldExpiry] = useState<Record<string, Record<string, string>>>({});
+  const [envFieldLifetime, setEnvFieldLifetime] = useState<Record<string, Record<string, boolean>>>({});
+  const [envFieldRevealed, setEnvFieldRevealed] = useState<Record<string, boolean>>({});
+  const [envSaving, setEnvSaving] = useState(false);
+  const [envError, setEnvError] = useState('');
 
   const [accountOpen, setAccountOpen] = useState(false);
   const [accountForm, setAccountForm] = useState({ provider: '', username: '', env: 'development' });
@@ -383,17 +394,317 @@ export default function ProjectDetails() {
             <div className="flex items-center justify-between">
               <p className="t-label">Environments</p>
               {['owner', 'admin'].includes(role) && (
-                <Dialog open={envOpen} onOpenChange={setEnvOpen}>
+                                <Dialog open={envOpen} onOpenChange={open => {
+                  setEnvOpen(open);
+                  if (!open) {
+                    setEnvWizardStep(1);
+                    setEnvForm({ name: 'production', url: '' });
+                    setEnvSelectedTechs([]);
+                    setEnvFieldValues({});
+                    setEnvFieldNotes({});
+                    setEnvFieldExpiry({});
+                    setEnvFieldLifetime({});
+                    setEnvCatalogueSearch('');
+                    setEnvError('');
+                  }
+                }}>
                   <DialogTrigger asChild>
-                    <button onClick={() => setEnvOpen(true)} className="flex items-center justify-center w-7 h-7 rounded t-btn-ghost" style={{ padding: 0 }}><Plus size={14} /></button>
+                    <button onClick={() => { setEnvOpen(true); setEnvWizardStep(1); if (envCatalogue.length === 0) api.get('/technologies').then(r => setEnvCatalogue(r.data || [])); }} className="flex items-center justify-center w-7 h-7 rounded t-btn-ghost" style={{ padding: 0 }}><Plus size={14} /></button>
                   </DialogTrigger>
-                  <DialogContent style={dialogStyle}>
-                    <DialogHeader><DialogTitle style={{ color: 'var(--text-primary)' }}>Add Environment</DialogTitle></DialogHeader>
-                    <form onSubmit={e => { e.preventDefault(); addEnvMutation.mutate({ ...envForm, projectId }); }} className="space-y-4 pt-2">
-                      <Field label="Environment Name"><input className={inputCls} placeholder="staging, production" value={envForm.name} onChange={e => setEnvForm({ ...envForm, name: e.target.value })} /></Field>
-                      <Field label="URL"><input className={inputCls} placeholder="https://staging.acme.com" value={envForm.url} onChange={e => setEnvForm({ ...envForm, url: e.target.value })} /></Field>
-                      <div className="flex justify-end gap-2"><button type="button" className="t-btn-ghost text-sm" onClick={() => setEnvOpen(false)}>Cancel</button><button type="submit" className="t-btn-primary text-sm">Add</button></div>
-                    </form>
+                  <DialogContent style={{ ...dialogStyle, maxWidth: 560, maxHeight: '90vh', overflowY: 'auto' }}>
+                    <DialogHeader>
+                      <DialogTitle style={{ color: 'var(--text-primary)' }}>
+                        {envWizardStep === 1 && 'New Environment — Basic Info'}
+                        {envWizardStep === 2 && 'New Environment — Select Tech Stacks'}
+                        {envWizardStep === 3 && 'New Environment — Configure Credentials'}
+                      </DialogTitle>
+                      {/* Step progress */}
+                      <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
+                        {[1,2,3].map(s => (
+                          <div key={s} style={{ flex: 1, height: 3, borderRadius: 99, background: envWizardStep >= s ? 'var(--accent)' : 'var(--border-subtle)' }} />
+                        ))}
+                      </div>
+                    </DialogHeader>
+
+                    {envError && <div style={{ fontSize: '0.72rem', color: '#ef4444', background: '#ef444415', padding: '0.5rem 0.75rem', borderRadius: 8, border: '1px solid #ef444430', marginTop: 8 }}>{envError}</div>}
+
+                    {/* ── Step 1: Basic Info ── */}
+                    {envWizardStep === 1 && (
+                      <form onSubmit={e => { e.preventDefault(); setEnvWizardStep(2); }} className="space-y-4 pt-2">
+                        <Field label="Environment Name *">
+                          <select className={inputCls} style={{ background: 'var(--surface-card)', color: 'var(--text-primary)' }} value={envForm.name} onChange={e => setEnvForm({ ...envForm, name: e.target.value })} required>
+                            <option value="production">Production</option>
+                            <option value="staging">Staging</option>
+                            <option value="development">Development</option>
+                            <option value="sandbox">Sandbox</option>
+                            <option value="qa">QA / Testing</option>
+                          </select>
+                        </Field>
+                        <Field label="Environment URL">
+                          <input className={inputCls} placeholder="https://app.example.com" value={envForm.url} onChange={e => setEnvForm({ ...envForm, url: e.target.value })} />
+                        </Field>
+                        <div className="flex justify-end gap-2 pt-2" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+                          <button type="button" className="t-btn-ghost text-sm" onClick={() => setEnvOpen(false)}>Cancel</button>
+                          <button type="submit" className="t-btn-primary text-sm px-5">Next: Add Tech Stacks →</button>
+                        </div>
+                      </form>
+                    )}
+
+                    {/* ── Step 2: Tech Stack Search & Select ── */}
+                    {envWizardStep === 2 && (() => {
+                      const filtered = envCatalogue.filter(t =>
+                        !envCatalogueSearch ||
+                        t.name.toLowerCase().includes(envCatalogueSearch.toLowerCase()) ||
+                        t.category.toLowerCase().includes(envCatalogueSearch.toLowerCase())
+                      );
+                      const catGroups: Record<string, any[]> = {};
+                      filtered.forEach(t => { catGroups[t.category] = [...(catGroups[t.category] || []), t]; });
+                      const selectedIds = new Set(envSelectedTechs.map(t => t.id));
+
+                      return (
+                        <div className="space-y-4 pt-2">
+                          {/* Selected tags */}
+                          {envSelectedTechs.length > 0 && (
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', padding: '0.5rem 0.75rem', background: 'var(--surface-sunken)', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
+                              {envSelectedTechs.map(t => (
+                                <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'var(--accent)', color: '#fff', padding: '2px 10px', borderRadius: 99, fontSize: '0.72rem', fontWeight: 600 }}>
+                                  {t.name}
+                                  <button type="button" onClick={() => { setEnvSelectedTechs(s => s.filter(x => x.id !== t.id)); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#fff', lineHeight: 1, padding: 0, marginLeft: 2, fontSize: '0.8rem' }}>×</button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Search */}
+                          <div style={{ position: 'relative' }}>
+                            <input
+                              className={inputCls}
+                              placeholder="Search AWS, GitHub, Stripe, Supabase…"
+                              value={envCatalogueSearch}
+                              onChange={e => setEnvCatalogueSearch(e.target.value)}
+                              autoFocus
+                            />
+                          </div>
+
+                          {/* Category-grouped results */}
+                          <div style={{ maxHeight: 280, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                            {Object.entries(catGroups).map(([cat, techs]) => (
+                              <div key={cat}>
+                                <div style={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-tertiary)', marginBottom: 6 }}>{cat}</div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                  {techs.map(t => {
+                                    const sel = selectedIds.has(t.id);
+                                    return (
+                                      <button
+                                        key={t.id}
+                                        type="button"
+                                        onClick={() => {
+                                          if (sel) setEnvSelectedTechs(s => s.filter(x => x.id !== t.id));
+                                          else setEnvSelectedTechs(s => [...s, t]);
+                                        }}
+                                        style={{
+                                          padding: '4px 12px', borderRadius: 8, fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer',
+                                          border: sel ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
+                                          background: sel ? 'var(--accent)' : 'var(--surface-card)',
+                                          color: sel ? '#fff' : 'var(--text-primary)',
+                                          transition: 'all 120ms',
+                                        }}
+                                      >
+                                        {sel && <span style={{ marginRight: 4 }}>✓</span>}{t.name}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ))}
+                            {filtered.length === 0 && <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.75rem', padding: '1rem' }}>No technologies found for "{envCatalogueSearch}"</div>}
+                          </div>
+
+                          <div className="flex justify-between gap-2 pt-2" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+                            <button type="button" className="t-btn-ghost text-sm" onClick={() => setEnvWizardStep(1)}>← Back</button>
+                            <div className="flex gap-2">
+                              <button type="button" className="t-btn-ghost text-sm" onClick={() => setEnvWizardStep(3)} style={{ color: 'var(--text-tertiary)', fontSize: '0.72rem' }}>Skip credentials</button>
+                              <button type="button" className="t-btn-primary text-sm px-5" disabled={envSelectedTechs.length === 0} onClick={() => setEnvWizardStep(3)}>
+                                Configure Credentials ({envSelectedTechs.length}) →
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* ── Step 3: Credential Entry Panels ── */}
+                    {envWizardStep === 3 && (
+                      <div className="space-y-4 pt-2">
+                        <p style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                          Fill in credential values for <strong>{envForm.name}</strong>. Secret fields are AES-256-GCM encrypted on save.
+                        </p>
+                        {envSelectedTechs.length === 0 && (
+                          <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.75rem', padding: '1.5rem' }}>No tech stacks selected — this will create the environment only.</div>
+                        )}
+                        <div style={{ maxHeight: 360, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                          {envSelectedTechs.map(tech => (
+                            <div key={tech.id} style={{ background: 'var(--surface-sunken)', borderRadius: 10, border: '1px solid var(--border-subtle)', overflow: 'hidden' }}>
+                              <div style={{ padding: '0.6rem 1rem', background: 'var(--surface-sunken)', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <div style={{ width: 24, height: 24, borderRadius: 6, background: 'var(--accent)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: 700, flexShrink: 0 }}>{tech.name.charAt(0)}</div>
+                                <span style={{ fontWeight: 700, fontSize: '0.82rem', color: 'var(--text-primary)' }}>{tech.name}</span>
+                                <span style={{ fontSize: '0.62rem', color: 'var(--text-tertiary)', marginLeft: 'auto', background: 'var(--surface-card)', padding: '2px 8px', borderRadius: 99, border: '1px solid var(--border-subtle)' }}>{tech.category}</span>
+                              </div>
+                              <div style={{ padding: '0.75rem 1rem', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                {(tech.fieldDefinitions || []).map((fd: any) => (
+                                  <div key={fd.fieldKey}>
+                                    <label style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 3 }}>
+                                      {fd.fieldLabel}
+                                      {fd.isRequired && <span style={{ color: '#ef4444', marginLeft: 2 }}>*</span>}
+                                      {fd.isSecret && <span style={{ color: '#f59e0b', fontSize: '0.6rem', marginLeft: 4 }}>🔒 Secret</span>}
+                                    </label>
+                                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                      {fd.fieldType === 'textarea' ? (
+                                        <textarea
+                                          rows={2} className={inputCls} style={{ flex: 1, fontFamily: fd.isSecret ? 'monospace' : undefined }}
+                                          placeholder={`Enter ${fd.fieldLabel}…`}
+                                          value={envFieldValues[tech.id]?.[fd.fieldKey] || ''}
+                                          onChange={e => setEnvFieldValues(prev => ({ ...prev, [tech.id]: { ...prev[tech.id], [fd.fieldKey]: e.target.value } }))}
+                                          required={fd.isRequired}
+                                        />
+                                      ) : (
+                                        <input
+                                          type={fd.isSecret && !envFieldRevealed[`${tech.id}:${fd.fieldKey}`] ? 'password' : 'text'}
+                                          className={inputCls} style={{ flex: 1, fontFamily: fd.isSecret ? 'monospace' : undefined }}
+                                          placeholder={`Enter ${fd.fieldLabel}…`}
+                                          value={envFieldValues[tech.id]?.[fd.fieldKey] || ''}
+                                          onChange={e => setEnvFieldValues(prev => ({ ...prev, [tech.id]: { ...prev[tech.id], [fd.fieldKey]: e.target.value } }))}
+                                          required={fd.isRequired}
+                                        />
+                                      )}
+                                      {fd.isSecret && (
+                                        <button type="button" onClick={() => setEnvFieldRevealed(prev => ({ ...prev, [`${tech.id}:${fd.fieldKey}`]: !prev[`${tech.id}:${fd.fieldKey}`] }))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: 4, flexShrink: 0 }}>
+                                          {envFieldRevealed[`${tech.id}:${fd.fieldKey}`] ? <EyeOff size={13} /> : <Eye size={13} />}
+                                        </button>
+                                      )}
+                                    </div>
+                                    {/* Notes & Expiry */}
+                                    <div style={{ marginTop: 6, display: 'grid', gridTemplateColumns: '1fr auto', gap: 6, alignItems: 'end' }}>
+                                      <textarea
+                                        rows={1} className={inputCls} style={{ fontSize: '0.65rem', resize: 'none' }}
+                                        placeholder="Add a note about this credential…"
+                                        value={envFieldNotes[tech.id]?.[fd.fieldKey] || ''}
+                                        onChange={e => setEnvFieldNotes(prev => ({ ...prev, [tech.id]: { ...prev[tech.id], [fd.fieldKey]: e.target.value } }))}
+                                      />
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-end', flexShrink: 0 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                          <input
+                                            type="checkbox" id={`lifetime-${tech.id}-${fd.fieldKey}`}
+                                            checked={envFieldLifetime[tech.id]?.[fd.fieldKey] ?? true}
+                                            onChange={e => setEnvFieldLifetime(prev => ({ ...prev, [tech.id]: { ...prev[tech.id], [fd.fieldKey]: e.target.checked } }))}
+                                            style={{ accentColor: 'var(--accent)' }}
+                                          />
+                                          <label htmlFor={`lifetime-${tech.id}-${fd.fieldKey}`} style={{ fontSize: '0.62rem', color: 'var(--text-tertiary)', cursor: 'pointer', whiteSpace: 'nowrap' }}>∞ Lifetime</label>
+                                        </div>
+                                        {!(envFieldLifetime[tech.id]?.[fd.fieldKey] ?? true) && (
+                                          <input
+                                            type="date" className={inputCls} style={{ fontSize: '0.65rem', padding: '2px 6px', width: 130 }}
+                                            value={envFieldExpiry[tech.id]?.[fd.fieldKey] || ''}
+                                            min={new Date().toISOString().split('T')[0]}
+                                            onChange={e => setEnvFieldExpiry(prev => ({ ...prev, [tech.id]: { ...prev[tech.id], [fd.fieldKey]: e.target.value } }))}
+                                          />
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                                {(tech.fieldDefinitions || []).length === 0 && <p style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>No credential fields defined for this technology.</p>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="flex justify-between gap-2 pt-2" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+                          <button type="button" className="t-btn-ghost text-sm" onClick={() => setEnvWizardStep(2)}>← Back</button>
+                          <button
+                            type="button"
+                            disabled={envSaving}
+                            className="t-btn-primary text-sm px-5"
+                            onClick={async () => {
+                              setEnvSaving(true);
+                              setEnvError('');
+                              try {
+                                // 1. Create the ProjectEnvironment record
+                                await api.post(`/projects/${projectId}/environments`, { name: envForm.name, url: envForm.url });
+
+                                // 2. For each selected tech: create account + env + fields + link
+                                for (const tech of envSelectedTechs) {
+                                  const { data: acct } = await api.post(`/technologies/${tech.id}/accounts`, {
+                                    accountName: `${tech.name} — ${project?.name || 'Project'} (${envForm.name})`,
+                                    ownerType: 'agency',
+                                    status: 'active',
+                                    billingCycle: 'monthly',
+                                  });
+                                  const { data: techEnv } = await api.post(`/technology-accounts/${acct.id}/environments`, {
+                                    environmentName: envForm.name.charAt(0).toUpperCase() + envForm.name.slice(1),
+                                    environmentType: envForm.name,
+                                    url: envForm.url || undefined,
+                                    active: true,
+                                  });
+                                  const fieldDefs = tech.fieldDefinitions || [];
+                                  for (const fd of fieldDefs) {
+                                    const val = envFieldValues[tech.id]?.[fd.fieldKey];
+                                    if (val) {
+                                      const note = envFieldNotes[tech.id]?.[fd.fieldKey];
+                                      const lifetime = envFieldLifetime[tech.id]?.[fd.fieldKey] ?? true;
+                                      const expiry = envFieldExpiry[tech.id]?.[fd.fieldKey];
+                                      await api.post(`/technology-accounts/${acct.id}/fields`, {
+                                        fieldKey: fd.fieldKey,
+                                        fieldLabel: fd.fieldLabel,
+                                        isSecret: fd.isSecret,
+                                        environmentId: techEnv.id,
+                                        value: val,
+                                        notes: note || undefined,
+                                        isLifetime: lifetime,
+                                        expiresAt: !lifetime && expiry ? new Date(expiry).toISOString() : undefined,
+                                      });
+                                    }
+                                  }
+                                  await api.post(`/projects/${projectId}/technologies`, {
+                                    technologyAccountId: acct.id,
+                                    connectionType: 'primary',
+                                  });
+                                }
+
+                                // 3. Dispatch audit log entry
+                                await api.post('/dispatch', {
+                                  projectId,
+                                  title: `Environment created: ${envForm.name}`,
+                                  communicationType: 'system',
+                                  source: 'manual',
+                                  rawContent: `Owner created a new ${envForm.name} environment with ${envSelectedTechs.length} tech stack(s): ${envSelectedTechs.map(t => t.name).join(', ') || 'none'}.`,
+                                  verificationStatus: 'verified',
+                                  sentiment: 'positive',
+                                  priority: 'normal',
+                                }).catch(() => {/* non-critical */});
+
+                                setEnvOpen(false);
+                                setEnvWizardStep(1);
+                                setEnvSelectedTechs([]);
+                                setEnvFieldValues({});
+                                setEnvFieldNotes({});
+                                setEnvFieldExpiry({});
+                                setEnvFieldLifetime({});
+                                setEnvCatalogueSearch('');
+                                setEnvForm({ name: 'production', url: '' });
+                                qc.invalidateQueries({ queryKey: ['project-detail', projectId] });
+                              } catch (err: any) {
+                                setEnvError(err.response?.data?.message || 'Save failed. Check all required fields.');
+                              } finally {
+                                setEnvSaving(false);
+                              }
+                            }}
+                          >
+                            {envSaving ? <><Loader2 size={13} className="animate-spin" style={{ display: 'inline', marginRight: 6 }} />Saving…</> : '✓ Create Environment & Save Credentials'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </DialogContent>
                 </Dialog>
               )}

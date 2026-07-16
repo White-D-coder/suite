@@ -93,8 +93,8 @@ async function main() {
       billingCurrency: 'USD',
       twoFactor: true,
       fields: {
-        public_key: 'pk_live_51PStripePubKeyExampleXyz',
-        secret_key: 'sk_live_51PStripeSecretKeyExampleAbc123',
+        public_key: 'example_public_key',
+        secret_key: 'example_secret_key',
         webhook_signing_secret: 'example_webhook_secret',
       },
     },
