@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useOutletContext } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
-import { Search, Plus, Briefcase, ExternalLink, Globe, AlertTriangle, Loader2, CircleDot, Filter, RefreshCw, Lock } from 'lucide-react';
+import { Search, Plus, Briefcase, ExternalLink, Globe, AlertTriangle, Loader2, CircleDot, Filter, RefreshCw, Lock, ChevronDown, X, Check } from 'lucide-react';
 
 interface Project {
   id: string;
@@ -72,6 +72,28 @@ export default function Projects() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState('');
+
+  // Client searchable combobox state
+  const [clientSearch, setClientSearch] = useState('');
+  const [clientDropdownOpen, setClientDropdownOpen] = useState(false);
+  const clientComboRef = useRef<HTMLDivElement>(null);
+
+  // Close client dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (clientComboRef.current && !clientComboRef.current.contains(e.target as Node)) {
+        setClientDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const selectedClient = clients?.find(c => c.id === form.clientId);
+  const filteredClients = clients?.filter(c => {
+    const q = clientSearch.toLowerCase();
+    return c.name.toLowerCase().includes(q) || (c.company || '').toLowerCase().includes(q);
+  }) ?? [];
   
   // Access Request states for Employees
   const [requestOpen, setRequestOpen] = useState(false);
@@ -116,6 +138,16 @@ export default function Projects() {
       setFormError('');
     },
     onError: (err: any) => setFormError(err.response?.data?.message || 'Failed to create project.'),
+  });
+
+  const createClientMutation = useMutation({
+    mutationFn: (name: string) => api.post('/clients', { name }).then(r => r.data),
+    onSuccess: (newClient: any) => {
+      qc.invalidateQueries({ queryKey: ['clients-list'] });
+      setForm(prev => ({ ...prev, clientId: newClient.id }));
+      setClientSearch('');
+      setClientDropdownOpen(false);
+    },
   });
 
   const requestAccessMutation = useMutation({
@@ -216,16 +248,129 @@ export default function Projects() {
 
               <form onSubmit={handleSubmit} className="space-y-4 pt-2">
                 <Field label="Client *">
-                  <select
-                    className={inputCls}
-                    style={{ borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', background: 'var(--surface-card)', color: 'var(--text-primary)' }}
-                    value={form.clientId}
-                    onChange={e => setForm({ ...form, clientId: e.target.value })}
-                    required
-                  >
-                    <option value="">Select a client</option>
-                    {clients?.map(c => <option key={c.id} value={c.id}>{c.name}{c.company ? ` (${c.company})` : ''}</option>)}
-                  </select>
+                  <div ref={clientComboRef} style={{ position: 'relative' }}>
+                    {/* Trigger input */}
+                    <div
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '6px',
+                        border: `1px solid ${clientDropdownOpen ? 'var(--accent-primary)' : 'var(--border-default)'}`,
+                        borderRadius: 'var(--radius-sm)',
+                        background: 'var(--surface-card)',
+                        padding: '0 10px',
+                        height: '36px',
+                        cursor: 'text',
+                        transition: 'border-color 0.15s',
+                        boxShadow: clientDropdownOpen ? '0 0 0 2px rgba(var(--accent-primary-rgb, 99,102,241),0.15)' : 'none',
+                      }}
+                      onClick={() => { setClientDropdownOpen(true); }}
+                    >
+                      <Search style={{ width: 13, height: 13, color: 'var(--text-tertiary)', flexShrink: 0 }} />
+                      <input
+                        type="text"
+                        placeholder={selectedClient ? '' : 'Type to search client…'}
+                        value={clientDropdownOpen ? clientSearch : (selectedClient ? '' : '')}
+                        onChange={e => { setClientSearch(e.target.value); setClientDropdownOpen(true); }}
+                        onFocus={() => setClientDropdownOpen(true)}
+                        style={{
+                          flex: 1, background: 'transparent', border: 'none', outline: 'none',
+                          fontSize: '13px', color: 'var(--text-primary)',
+                          display: clientDropdownOpen ? 'block' : (selectedClient ? 'none' : 'block'),
+                        }}
+                      />
+                      {selectedClient && !clientDropdownOpen && (
+                        <span style={{ flex: 1, fontSize: '13px', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {selectedClient.name}{selectedClient.company ? ` (${selectedClient.company})` : ''}
+                        </span>
+                      )}
+                      {selectedClient ? (
+                        <button type="button" onClick={e => { e.stopPropagation(); setForm({ ...form, clientId: '' }); setClientSearch(''); setClientDropdownOpen(false); }}
+                          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                          <X style={{ width: 13, height: 13, color: 'var(--text-tertiary)' }} />
+                        </button>
+                      ) : (
+                        <ChevronDown style={{ width: 13, height: 13, color: 'var(--text-tertiary)', flexShrink: 0, transform: clientDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
+                      )}
+                    </div>
+
+                    {/* Dropdown list */}
+                    {clientDropdownOpen && (
+                      <div style={{
+                        position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50,
+                        background: 'var(--surface-card)',
+                        border: '1px solid var(--border-default)',
+                        borderRadius: 'var(--radius-sm)',
+                        marginTop: '4px',
+                        maxHeight: '180px',
+                        overflowY: 'auto',
+                        boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+                      }}>
+                        {filteredClients.length === 0 && !clientSearch.trim() ? (
+                          <div style={{ padding: '10px 12px', fontSize: '12px', color: 'var(--text-tertiary)', textAlign: 'center' }}>
+                            No clients yet
+                          </div>
+                        ) : filteredClients.map(c => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => {
+                              setForm({ ...form, clientId: c.id });
+                              setClientSearch('');
+                              setClientDropdownOpen(false);
+                            }}
+                            style={{
+                              width: '100%', textAlign: 'left', padding: '8px 12px',
+                              background: form.clientId === c.id ? 'var(--surface-sunken)' : 'transparent',
+                              border: 'none', cursor: 'pointer',
+                              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px',
+                              fontSize: '13px', color: 'var(--text-primary)',
+                              transition: 'background 0.1s',
+                            }}
+                            onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-sunken)')}
+                            onMouseLeave={e => (e.currentTarget.style.background = form.clientId === c.id ? 'var(--surface-sunken)' : 'transparent')}
+                          >
+                            <span>
+                              <span style={{ fontWeight: 600 }}>{c.name}</span>
+                              {c.company && <span style={{ marginLeft: 6, fontSize: '11px', color: 'var(--text-tertiary)' }}>{c.company}</span>}
+                            </span>
+                            {form.clientId === c.id && <Check style={{ width: 12, height: 12, color: 'var(--accent-primary)' }} />}
+                          </button>
+                        ))}
+
+                        {clientSearch.trim() && (
+                          <>
+                            {filteredClients.length > 0 && (
+                              <div style={{ height: '1px', background: 'var(--border-subtle)', margin: '2px 0' }} />
+                            )}
+                            <button
+                              type="button"
+                              disabled={createClientMutation.isPending}
+                              onClick={() => createClientMutation.mutate(clientSearch.trim())}
+                              style={{
+                                width: '100%', textAlign: 'left', padding: '9px 12px',
+                                background: 'transparent',
+                                border: 'none', cursor: createClientMutation.isPending ? 'wait' : 'pointer',
+                                display: 'flex', alignItems: 'center', gap: '7px',
+                                fontSize: '13px',
+                                color: 'var(--accent-primary, #6366f1)',
+                                fontWeight: 600,
+                                transition: 'background 0.1s',
+                                opacity: createClientMutation.isPending ? 0.6 : 1,
+                              }}
+                              onMouseEnter={e => { if (!createClientMutation.isPending) e.currentTarget.style.background = 'rgba(99,102,241,0.08)'; }}
+                              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                            >
+                              <Plus style={{ width: 13, height: 13, flexShrink: 0 }} />
+                              <span>
+                                {createClientMutation.isPending ? 'Creating…' : <>
+                                  Create &nbsp;<em style={{ fontStyle: 'normal', background: 'rgba(99,102,241,0.12)', borderRadius: '3px', padding: '1px 5px' }}>"{clientSearch.trim()}"</em>&nbsp; as new client
+                                </>}
+                              </span>
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </Field>
                 <Field label="Project Name *">
                   <input className={inputCls} style={{ borderRadius: 'var(--radius-sm)' }} placeholder="Acme E-Commerce" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required />
