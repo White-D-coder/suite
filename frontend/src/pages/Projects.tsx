@@ -89,12 +89,7 @@ export default function Projects() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const selectedClient = clients?.find(c => c.id === form.clientId);
-  const filteredClients = clients?.filter(c => {
-    const q = clientSearch.toLowerCase();
-    return c.name.toLowerCase().includes(q) || (c.company || '').toLowerCase().includes(q);
-  }) ?? [];
-  
+
   // Access Request states for Employees
   const [requestOpen, setRequestOpen] = useState(false);
   const [requestProjId, setRequestProjId] = useState('');
@@ -128,6 +123,12 @@ export default function Projects() {
     refetchInterval: 5000,
     refetchIntervalInBackground: true,
   });
+
+  const selectedClient = clients?.find(c => c.id === form.clientId);
+  const filteredClients = clients?.filter(c => {
+    const q = clientSearch.toLowerCase();
+    return c.name.toLowerCase().includes(q) || (c.company || '').toLowerCase().includes(q);
+  }) ?? [];
 
   const createMutation = useMutation({
     mutationFn: (payload: any) => api.post('/projects', payload),
