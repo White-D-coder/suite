@@ -4,7 +4,7 @@ import { ExchangeRateService } from './exchange-rate.service';
 import { CreateIncomeDto } from './dto/create-income.dto';
 import { CreateExpenseDto } from './dto/create-expense.dto';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
-import { Prisma } from '@prisma/client';
+
 import { CommsService } from '../comms/comms.service';
 
 @Injectable()
@@ -36,9 +36,9 @@ export class FinancialService {
         clientId,
         projectId,
         invoiceId,
-        amount: new Prisma.Decimal(amount),
+        amount: Number(amount),
         currency,
-        exchangeRate: new Prisma.Decimal(rate),
+        exchangeRate: Number(rate),
         paymentDate: new Date(paymentDate),
         status,
       },
@@ -63,7 +63,7 @@ export class FinancialService {
     return this.prisma.expense.create({
       data: {
         ...rest,
-        amount: new Prisma.Decimal(rest.amount),
+        amount: Number(rest.amount),
         paymentDate: new Date(rest.paymentDate),
         recurrence: recurrence || 'one-off',
         vendor,
@@ -71,7 +71,7 @@ export class FinancialService {
         status: status || 'paid',
         dueDate: dueDate ? new Date(dueDate) : null,
         reminderDays: reminderDays ?? 7,
-        taxAmount: taxAmount ? new Prisma.Decimal(taxAmount) : null,
+        taxAmount: taxAmount ? Number(taxAmount) : null,
         taxProfile,
         receiptAttachment,
       },
@@ -95,10 +95,10 @@ export class FinancialService {
     if (!existing) throw new NotFoundException('Expense not found');
 
     const updateData: any = { ...data };
-    if (data.amount !== undefined) updateData.amount = new Prisma.Decimal(data.amount);
+    if (data.amount !== undefined) updateData.amount = Number(data.amount);
     if (data.paymentDate !== undefined) updateData.paymentDate = new Date(data.paymentDate);
     if (data.dueDate !== undefined) updateData.dueDate = data.dueDate ? new Date(data.dueDate) : null;
-    if (data.taxAmount !== undefined) updateData.taxAmount = data.taxAmount ? new Prisma.Decimal(data.taxAmount) : null;
+    if (data.taxAmount !== undefined) updateData.taxAmount = data.taxAmount ? Number(data.taxAmount) : null;
     if (data.postponedUntil !== undefined) updateData.postponedUntil = data.postponedUntil ? new Date(data.postponedUntil) : null;
 
     // Log edit to Audit trail
@@ -149,11 +149,11 @@ export class FinancialService {
       data: {
         employeeId: data.employeeId,
         employmentType: data.employmentType || 'employee',
-        grossAmount: new Prisma.Decimal(gross),
-        deductions: new Prisma.Decimal(deductions),
-        taxAmount: new Prisma.Decimal(tax),
-        benefits: new Prisma.Decimal(benefits),
-        netAmount: new Prisma.Decimal(net),
+        grossAmount: gross,
+        deductions: deductions,
+        taxAmount: tax,
+        benefits: benefits,
+        netAmount: net,
         dueDate: new Date(data.dueDate),
         payPeriod: data.payPeriod || '2026-07',
         status: data.status || 'pending',
@@ -186,13 +186,13 @@ export class FinancialService {
     let tax = Number(data.taxAmount ?? existing.taxAmount);
     let benefits = Number(data.benefits ?? existing.benefits);
 
-    if (data.grossAmount !== undefined) updateData.grossAmount = new Prisma.Decimal(gross);
-    if (data.deductions !== undefined) updateData.deductions = new Prisma.Decimal(deductions);
-    if (data.taxAmount !== undefined) updateData.taxAmount = new Prisma.Decimal(tax);
-    if (data.benefits !== undefined) updateData.benefits = new Prisma.Decimal(benefits);
+    if (data.grossAmount !== undefined) updateData.grossAmount = gross;
+    if (data.deductions !== undefined) updateData.deductions = deductions;
+    if (data.taxAmount !== undefined) updateData.taxAmount = tax;
+    if (data.benefits !== undefined) updateData.benefits = benefits;
     
     // Recalculate net
-    updateData.netAmount = new Prisma.Decimal(gross - deductions - tax + benefits);
+    updateData.netAmount = gross - deductions - tax + benefits;
 
     if (data.dueDate !== undefined) updateData.dueDate = new Date(data.dueDate);
     if (data.paidDate !== undefined) updateData.paidDate = data.paidDate ? new Date(data.paidDate) : null;
@@ -230,7 +230,7 @@ export class FinancialService {
     return this.prisma.subscription.create({
       data: {
         ...dto,
-        cost: new Prisma.Decimal(dto.cost),
+        cost: Number(dto.cost),
         renewalDate: new Date(dto.renewalDate),
       },
     });

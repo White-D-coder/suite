@@ -36,4 +36,9 @@ export class CreateClientDto {
   @IsString()
   @IsOptional()
   notes?: string;
+
+  @IsString()
+  @IsOptional()
+  type?: string;
 }
+

@@ -36,4 +36,8 @@ export class UpdateClientDto {
   @IsString()
   @IsOptional()
   notes?: string;
+
+  @IsString()
+  @IsOptional()
+  type?: string;
 }

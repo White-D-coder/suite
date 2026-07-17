@@ -95,12 +95,16 @@ export default function Projects() {
   const { data: projects, isLoading } = useQuery<Project[]>({
     queryKey: ['projects-list'],
     queryFn: () => api.get('/projects').then(r => r.data),
+    refetchInterval: 5000,
+    refetchIntervalInBackground: true,
   });
 
   const { data: clients } = useQuery<Client[]>({
     queryKey: ['clients-list'],
     queryFn: () => api.get('/clients').then(r => r.data),
     enabled: role !== 'employee',
+    refetchInterval: 5000,
+    refetchIntervalInBackground: true,
   });
 
   const createMutation = useMutation({

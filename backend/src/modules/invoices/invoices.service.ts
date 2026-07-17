@@ -3,7 +3,7 @@ import { PrismaService } from '../../common/services/prisma.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
-import { Prisma } from '@prisma/client';
+
 import { ExchangeRateService } from '../financial/exchange-rate.service';
 
 @Injectable()
@@ -58,31 +58,31 @@ export class InvoicesService {
       return {
         description: item.description,
         quantity: item.quantity,
-        unitPrice: new Prisma.Decimal(item.unitPrice),
-        total: new Prisma.Decimal(itemTotal),
+        unitPrice: item.unitPrice,
+        total: itemTotal,
       };
     });
 
     // 2. Apply Tax Profile rules
-    let subtotal = new Prisma.Decimal(subtotalVal);
-    let finalTaxRate = new Prisma.Decimal(taxRate);
-    let taxAmount = new Prisma.Decimal(0);
-    let total = new Prisma.Decimal(0);
+    let subtotal = subtotalVal;
+    let finalTaxRate = taxRate;
+    let taxAmount = 0;
+    let total = 0;
 
     const mode = taxProfile || 'exclusive';
     if (mode === 'inclusive') {
       // subtotalVal is the total price including tax
       total = subtotal;
-      taxAmount = total.mul(finalTaxRate).div(finalTaxRate.add(100));
-      subtotal = total.sub(taxAmount);
+      taxAmount = (total * finalTaxRate) / (finalTaxRate + 100);
+      subtotal = total - taxAmount;
     } else if (mode === 'exempt' || mode === 'reverse-charge') {
-      finalTaxRate = new Prisma.Decimal(0);
-      taxAmount = new Prisma.Decimal(0);
+      finalTaxRate = 0;
+      taxAmount = 0;
       total = subtotal;
     } else {
       // standard exclusive
-      taxAmount = subtotal.mul(finalTaxRate).div(100);
-      total = subtotal.add(taxAmount);
+      taxAmount = (subtotal * finalTaxRate) / 100;
+      total = subtotal + taxAmount;
     }
 
     // 3. Multi-currency & FX Freezing logic
@@ -111,18 +111,18 @@ export class InvoicesService {
 
         scheduleData.push({
           milestoneName: sch.milestoneName,
-          percentage: sch.percentage ? new Prisma.Decimal(sch.percentage) : null,
-          amountDue: new Prisma.Decimal(sch.amountDue),
+          percentage: sch.percentage ?? null,
+          amountDue: sch.amountDue,
           paymentStatus: paidStatus,
           dueDate: sch.dueDate ? new Date(sch.dueDate) : null,
-          paidAmount: new Prisma.Decimal(schPaidAmount),
+          paidAmount: schPaidAmount,
           paidAt: isPaid ? new Date() : null,
         });
       });
     }
 
-    const paidAmount = new Prisma.Decimal(paidAmountVal);
-    const remainingBalance = total.sub(paidAmount);
+    const paidAmount = paidAmountVal;
+    const remainingBalance = total - paidAmount;
 
     // 5. Save the Invoices record
     const invoice = await this.prisma.invoice.create({
@@ -147,7 +147,7 @@ export class InvoicesService {
         baseCurrency,
         clientCurrency: clientCurrency || currency,
         displayCurrency: displayCurrency || currency,
-        fxRate: new Prisma.Decimal(resolvedFxRate),
+        fxRate: resolvedFxRate,
         fxSource: resolvedFxSource,
         fxTimestamp: new Date(),
         fxMode: fxMode || 'frozen',

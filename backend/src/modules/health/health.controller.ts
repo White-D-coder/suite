@@ -18,10 +18,10 @@ export class HealthController {
   @HealthCheck()
   async check() {
     return this.health.check([
-      // Database connection audit
+      // Database connection audit (MongoDB compatible)
       async () => {
         try {
-          await this.prisma.$queryRaw`SELECT 1`;
+          await this.prisma.$runCommandRaw({ ping: 1 });
           return { database: { status: 'up' } };
         } catch (err) {
           return { database: { status: 'down', error: (err as Error).message } };

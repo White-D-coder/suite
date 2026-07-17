@@ -3,50 +3,41 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { api } from '../lib/api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
-import { Search, Plus, Building, User, Mail, AlertTriangle, Loader2, ArrowRight } from 'lucide-react';
+import { Search, Plus, Building, User, Mail, AlertTriangle, Loader2, ArrowRight, Tag } from 'lucide-react';
 
 interface Client {
   id: string; name: string; company?: string;
-  email?: string; phone?: string; country?: string; notes?: string;
+  email?: string; phone?: string; country?: string; notes?: string; type?: string;
 }
+
+const CLIENT_TYPES = [
+  { value: '', label: 'Select type…' },
+  { value: 'agency', label: 'Agency' },
+  { value: 'direct', label: 'Direct' },
+  { value: 'referral', label: 'Referral' },
+  { value: 'enterprise', label: 'Enterprise' },
+  { value: 'startup', label: 'Startup' },
+];
 
 const emptyForm = {
   name: '', company: '', email: '', phone: '', country: '',
-  currency: 'USD', billingAddress: '', paymentTerms: 'Net 30', notes: '',
+  currency: 'USD', billingAddress: '', paymentTerms: 'Net 30', notes: '', type: '',
 };
 
 const inputCls = 't-input w-full px-3 py-2.5 text-sm';
 const rSm = { borderRadius: 'var(--radius-sm)' };
 
 const countryCurrencyMap: Record<string, string> = {
-  'united states': 'USD',
-  'us': 'USD',
-  'usa': 'USD',
-  'united kingdom': 'GBP',
-  'uk': 'GBP',
-  'great britain': 'GBP',
-  'england': 'GBP',
-  'germany': 'EUR',
-  'france': 'EUR',
-  'italy': 'EUR',
-  'spain': 'EUR',
-  'netherlands': 'EUR',
-  'belgium': 'EUR',
-  'ireland': 'EUR',
-  'europe': 'EUR',
-  'eu': 'EUR',
-  'india': 'INR',
-  'in': 'INR',
-  'canada': 'CAD',
-  'ca': 'CAD',
-  'australia': 'AUD',
-  'au': 'AUD',
-  'japan': 'JPY',
-  'jp': 'JPY',
-  'singapore': 'SGD',
-  'sg': 'SGD',
-  'switzerland': 'CHF',
-  'ch': 'CHF',
+  'united states': 'USD', 'us': 'USD', 'usa': 'USD',
+  'united kingdom': 'GBP', 'uk': 'GBP', 'great britain': 'GBP', 'england': 'GBP',
+  'germany': 'EUR', 'france': 'EUR', 'italy': 'EUR', 'spain': 'EUR',
+  'netherlands': 'EUR', 'belgium': 'EUR', 'ireland': 'EUR', 'europe': 'EUR', 'eu': 'EUR',
+  'india': 'INR', 'in': 'INR',
+  'canada': 'CAD', 'ca': 'CAD',
+  'australia': 'AUD', 'au': 'AUD',
+  'japan': 'JPY', 'jp': 'JPY',
+  'singapore': 'SGD', 'sg': 'SGD',
+  'switzerland': 'CHF', 'ch': 'CHF',
 };
 
 function getCurrencyByCountry(country: string): string {
@@ -56,6 +47,24 @@ function getCurrencyByCountry(country: string): string {
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <div className="space-y-1"><label className="t-label">{label}</label>{children}</div>;
+}
+
+const TYPE_BADGE_COLORS: Record<string, { bg: string; color: string }> = {
+  agency:     { bg: 'rgba(139,92,246,0.15)',  color: '#a78bfa' },
+  direct:     { bg: 'rgba(16,185,129,0.15)',  color: '#34d399' },
+  referral:   { bg: 'rgba(59,130,246,0.15)',  color: '#60a5fa' },
+  enterprise: { bg: 'rgba(245,158,11,0.15)',  color: '#fbbf24' },
+  startup:    { bg: 'rgba(236,72,153,0.15)',  color: '#f472b6' },
+};
+
+function TypeBadge({ type }: { type?: string }) {
+  if (!type) return null;
+  const colors = TYPE_BADGE_COLORS[type] || { bg: 'var(--surface-sunken)', color: 'var(--text-secondary)' };
+  return (
+    <span style={{ background: colors.bg, color: colors.color, borderRadius: '4px', padding: '2px 7px', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+      {type}
+    </span>
+  );
 }
 
 export default function Clients() {
@@ -80,11 +89,18 @@ export default function Clients() {
   const { data: clients, isLoading } = useQuery<Client[]>({
     queryKey: ['clients-list'],
     queryFn: () => api.get('/clients').then(r => r.data),
+    refetchInterval: 5000, // real-time polling every 5s
+    refetchIntervalInBackground: true,
   });
 
   const createMutation = useMutation({
     mutationFn: (payload: typeof form) => api.post('/clients', payload),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['clients-list'] }); setOpen(false); setForm(emptyForm); setFormError(''); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['clients-list'] });
+      setOpen(false);
+      setForm(emptyForm);
+      setFormError('');
+    },
     onError: (err: any) => setFormError(err.response?.data?.message || 'Failed to create client.'),
   });
 
@@ -139,14 +155,26 @@ export default function Clients() {
                   <Field label="Email"><input type="email" className={inputCls} style={rSm} placeholder="john@example.com" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></Field>
                   <Field label="Phone"><input className={inputCls} style={rSm} placeholder="+1 555-0199" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} /></Field>
                 </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Client Type">
+                    <select
+                      className={inputCls}
+                      style={{ ...rSm, background: 'var(--surface-card)', color: 'var(--text-primary)', border: '1px solid var(--border-default)' }}
+                      value={form.type}
+                      onChange={e => setForm({ ...form, type: e.target.value })}
+                    >
+                      {CLIENT_TYPES.map(t => (
+                        <option key={t.value} value={t.value}>{t.label}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Payment Terms"><input className={inputCls} style={rSm} placeholder="Net 30" value={form.paymentTerms} onChange={e => setForm({ ...form, paymentTerms: e.target.value })} /></Field>
+                </div>
                 <div className="grid grid-cols-3 gap-4">
                   <Field label="Country"><input className={inputCls} style={rSm} placeholder="United States" value={form.country} onChange={e => handleCountryChange(e.target.value)} /></Field>
                   <Field label="Currency"><input className={inputCls} style={rSm} placeholder="USD" value={form.currency} onChange={e => setForm({ ...form, currency: e.target.value })} /></Field>
-                  <Field label="Payment Terms"><input className={inputCls} style={rSm} placeholder="Net 30" value={form.paymentTerms} onChange={e => setForm({ ...form, paymentTerms: e.target.value })} /></Field>
+                  <Field label="Billing Address"><input className={inputCls} style={rSm} placeholder="123 Main St…" value={form.billingAddress} onChange={e => setForm({ ...form, billingAddress: e.target.value })} /></Field>
                 </div>
-                <Field label="Billing Address">
-                  <textarea className={`${inputCls} h-16 resize-none`} style={rSm} placeholder="123 Main St…" value={form.billingAddress} onChange={e => setForm({ ...form, billingAddress: e.target.value })} />
-                </Field>
                 <Field label="Notes">
                   <textarea className={`${inputCls} h-16 resize-none`} style={rSm} placeholder="Relationship notes…" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
                 </Field>
@@ -182,6 +210,7 @@ export default function Clients() {
                     <th>Client Name</th>
                     <th>Company</th>
                     <th>Email</th>
+                    <th>Type</th>
                     <th>Country</th>
                     <th className="w-12" />
                   </tr>
@@ -211,6 +240,14 @@ export default function Clients() {
                           </div>
                         ) : <span style={{ color: 'var(--text-tertiary)' }} className="italic text-xs">—</span>}
                       </td>
+                      <td>
+                        {client.type ? (
+                          <div className="flex items-center gap-1.5">
+                            <Tag className="h-3 w-3" style={{ color: 'var(--text-tertiary)' }} />
+                            <TypeBadge type={client.type} />
+                          </div>
+                        ) : <span style={{ color: 'var(--text-tertiary)' }} className="italic text-xs">—</span>}
+                      </td>
                       <td><span style={{ color: 'var(--text-secondary)' }}>{client.country || '—'}</span></td>
                       <td>
                         <div className="flex justify-end">
@@ -229,7 +266,10 @@ export default function Clients() {
                 <button key={client.id} className="w-full text-left p-4 flex items-center justify-between hover:bg-[var(--surface-sunken)] transition-colors"
                   onClick={() => navigate(`/dashboard/clients/${client.id}`)}>
                   <div className="space-y-0.5">
-                    <p className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>{client.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>{client.name}</p>
+                      <TypeBadge type={client.type} />
+                    </div>
                     {client.company && <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>{client.company}</p>}
                     {client.email && <p className="text-xs font-mono" style={{ color: 'var(--text-tertiary)' }}>{client.email}</p>}
                   </div>

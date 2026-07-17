@@ -175,18 +175,30 @@ export class TechnologyVaultService {
   // ─── Project Linking ───────────────────────────────────
 
   async linkToProject(projectId: string, technologyAccountId: string, connectionType?: string) {
-    return this.prisma.projectTechnologyLink.upsert({
-      where: { projectId_technologyAccountId: { projectId, technologyAccountId } },
-      create: { projectId, technologyAccountId, connectionType, active: true },
-      update: { active: true, connectionType },
+    const existing = await this.prisma.projectTechnologyLink.findFirst({
+      where: { projectId, technologyAccountId },
+    });
+    if (existing) {
+      return this.prisma.projectTechnologyLink.update({
+        where: { id: existing.id },
+        data: { active: true, connectionType },
+      });
+    }
+    return this.prisma.projectTechnologyLink.create({
+      data: { projectId, technologyAccountId, connectionType, active: true },
     });
   }
 
   async unlinkFromProject(projectId: string, technologyAccountId: string) {
-    await this.prisma.projectTechnologyLink.update({
-      where: { projectId_technologyAccountId: { projectId, technologyAccountId } },
-      data: { active: false },
+    const existing = await this.prisma.projectTechnologyLink.findFirst({
+      where: { projectId, technologyAccountId },
     });
+    if (existing) {
+      await this.prisma.projectTechnologyLink.update({
+        where: { id: existing.id },
+        data: { active: false },
+      });
+    }
     return { message: 'Unlinked' };
   }
 
