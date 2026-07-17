@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/services/prisma.service';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
+import { randomUUID } from 'crypto';
 
 @Injectable()
 export class ClientsService {
@@ -9,7 +10,10 @@ export class ClientsService {
 
   async create(createClientDto: CreateClientDto) {
     return this.prisma.client.create({
-      data: createClientDto,
+      data: {
+        id: randomUUID(),
+        ...createClientDto,
+      },
     });
   }
 
@@ -83,6 +87,7 @@ export class ClientsService {
     await this.findOne(clientId);
     return this.prisma.clientContact.create({
       data: {
+        id: randomUUID(),
         clientId,
         name: data.name,
         role: data.role || 'POC',
@@ -116,6 +121,7 @@ export class ClientsService {
     }
     return this.prisma.contactChannel.create({
       data: {
+        id: randomUUID(),
         contactId,
         phoneType: data.phoneType,
         numberOrAddress: data.numberOrAddress,

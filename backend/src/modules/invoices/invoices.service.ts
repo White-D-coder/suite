@@ -3,6 +3,7 @@ import { PrismaService } from '../../common/services/prisma.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
+import { randomUUID } from 'crypto';
 
 import { ExchangeRateService } from '../financial/exchange-rate.service';
 
@@ -56,6 +57,7 @@ export class InvoicesService {
       const itemTotal = item.quantity * item.unitPrice;
       subtotalVal += itemTotal;
       return {
+        id: randomUUID(),
         description: item.description,
         quantity: item.quantity,
         unitPrice: item.unitPrice,

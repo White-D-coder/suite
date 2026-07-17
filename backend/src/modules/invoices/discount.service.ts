@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../common/services/prisma.service';
 import { CreateDiscountDto } from './dto/create-discount.dto';
+import { randomUUID } from 'crypto';
 
 const DISCOUNT_LIMITS: Record<string, { maxPercent: number; maxFixed: number }> = {
   finance: { maxPercent: 5, maxFixed: 0 },
@@ -110,6 +111,7 @@ export class DiscountService {
 
     const discount = await this.prisma.invoiceDiscount.create({
       data: {
+        id: randomUUID(),
         invoiceId,
         invoiceItemId: dto.invoiceItemId,
         discountType: dto.discountType,

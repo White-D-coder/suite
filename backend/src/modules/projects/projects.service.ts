@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/commo
 import { PrismaService } from '../../common/services/prisma.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
+import { randomUUID } from 'crypto';
 
 @Injectable()
 export class ProjectsService {
@@ -19,6 +20,7 @@ export class ProjectsService {
 
     return this.prisma.project.create({
       data: {
+        id: randomUUID(),
         ...rest,
         client: { connect: { id: clientId } },
         startDate: startDate ? new Date(startDate) : undefined,
@@ -153,6 +155,7 @@ export class ProjectsService {
       for (const col of collections) {
         await this.prisma.rotationTask.create({
           data: {
+            id: randomUUID(),
             collectionId: col.id,
             status: 'pending',
             priority: 'high',
@@ -164,6 +167,7 @@ export class ProjectsService {
       // Log project completion to Audit Log
       await this.prisma.auditLog.create({
         data: {
+          id: randomUUID(),
           userId: user.id,
           action: 'project_completed',
           details: JSON.stringify({ projectId: id, projectName: existing.name }),
@@ -188,6 +192,7 @@ export class ProjectsService {
     // Audit deletion
     await this.prisma.auditLog.create({
       data: {
+        id: randomUUID(),
         userId: user.id,
         action: 'deletion',
         details: JSON.stringify({ resource: 'project', id, name: existing.name }),
@@ -206,6 +211,7 @@ export class ProjectsService {
     // Create assignment and log to audit trail
     const assignment = await this.prisma.projectAssignment.create({
       data: {
+        id: randomUUID(),
         projectId,
         employeeId: data.employeeId,
         roleOnProject: data.roleOnProject || 'Team Member',
@@ -216,6 +222,7 @@ export class ProjectsService {
 
     await this.prisma.auditLog.create({
       data: {
+        id: randomUUID(),
         userId: user.id,
         action: 'due_date_change', // Relates to assignment/schedule updates
         details: JSON.stringify({
@@ -240,6 +247,7 @@ export class ProjectsService {
 
     await this.prisma.auditLog.create({
       data: {
+        id: randomUUID(),
         userId: user.id,
         action: 'deletion',
         details: JSON.stringify({ action: 'remove_assignment', assignmentId, projectId: assignment.projectId }),
@@ -255,6 +263,7 @@ export class ProjectsService {
   async addContract(projectId: string, data: any) {
     return this.prisma.projectContract.create({
       data: {
+        id: randomUUID(),
         projectId,
         title: data.title,
         contractStatus: data.contractStatus || 'active',
@@ -275,6 +284,7 @@ export class ProjectsService {
   async addAccount(projectId: string, data: any) {
     return this.prisma.projectAccount.create({
       data: {
+        id: randomUUID(),
         projectId,
         provider: data.provider,
         username: data.username,
@@ -292,6 +302,7 @@ export class ProjectsService {
   async addToolSubscription(projectId: string, data: any) {
     return this.prisma.projectToolSubscription.create({
       data: {
+        id: randomUUID(),
         projectId,
         vendor: data.vendor,
         cost: data.cost,
@@ -310,6 +321,7 @@ export class ProjectsService {
   async addProgressUpdate(projectId: string, data: any) {
     return this.prisma.projectProgressUpdate.create({
       data: {
+        id: randomUUID(),
         projectId,
         updaterId: data.updaterId,
         updateText: data.updateText,
@@ -321,6 +333,7 @@ export class ProjectsService {
   async addEnvironment(projectId: string, data: any) {
     return this.prisma.projectEnvironment.create({
       data: {
+        id: randomUUID(),
         projectId,
         name: data.name,
         url: data.url,

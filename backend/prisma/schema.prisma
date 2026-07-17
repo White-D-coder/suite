@@ -8,7 +8,7 @@ datasource db {
 }
 
 model User {
-  id           String          @id @default(auto()) @map("_id") @db.ObjectId
+  id           String          @id @map("_id")
   email        String          @unique
   passwordHash String
   name         String          @default("Internal User")
@@ -25,8 +25,8 @@ model User {
 }
 
 model CompanySetting {
-  id            String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId        String   @unique @db.ObjectId
+  id            String   @id @map("_id")
+  userId        String   @unique
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   companyName   String?
   currency      String   @default("USD")
@@ -35,7 +35,7 @@ model CompanySetting {
 }
 
 model Client {
-  id             String          @id @default(auto()) @map("_id") @db.ObjectId
+  id             String          @id @map("_id")
   name           String
   company        String?
   email          String?
@@ -55,8 +55,8 @@ model Client {
 }
 
 model ClientContact {
-  id                  String          @id @default(auto()) @map("_id") @db.ObjectId
-  clientId            String          @db.ObjectId
+  id                  String          @id @map("_id")
+  clientId            String
   client              Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
   name                String
   role                String
@@ -73,8 +73,8 @@ model ClientContact {
 }
 
 model ContactChannel {
-  id              String        @id @default(auto()) @map("_id") @db.ObjectId
-  contactId       String        @db.ObjectId
+  id              String        @id @map("_id")
+  contactId       String
   contact         ClientContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
   phoneType       String
   numberOrAddress String
@@ -83,8 +83,8 @@ model ContactChannel {
 }
 
 model Project {
-  id                 String                    @id @default(auto()) @map("_id") @db.ObjectId
-  clientId           String                    @db.ObjectId
+  id                 String                    @id @map("_id")
+  clientId           String
   client             Client                    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   name               String
   description        String?
@@ -129,8 +129,8 @@ model Project {
 }
 
 model ProjectContract {
-  id             String    @id @default(auto()) @map("_id") @db.ObjectId
-  projectId      String    @db.ObjectId
+  id             String    @id @map("_id")
+  projectId      String
   project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   title          String
   contractStatus String    @default("active")
@@ -142,8 +142,8 @@ model ProjectContract {
 }
 
 model ProjectAccount {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  projectId String   @db.ObjectId
+  id        String   @id @map("_id")
+  projectId String
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   provider  String
   username  String
@@ -152,8 +152,8 @@ model ProjectAccount {
 }
 
 model ProjectToolSubscription {
-  id           String   @id @default(auto()) @map("_id") @db.ObjectId
-  projectId    String   @db.ObjectId
+  id           String   @id @map("_id")
+  projectId    String
   project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   vendor       String
   cost         Float
@@ -163,8 +163,8 @@ model ProjectToolSubscription {
 }
 
 model ProjectProgressUpdate {
-  id         String   @id @default(auto()) @map("_id") @db.ObjectId
-  projectId  String   @db.ObjectId
+  id         String   @id @map("_id")
+  projectId  String
   project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   updaterId  String
   updateText String
@@ -173,8 +173,8 @@ model ProjectProgressUpdate {
 }
 
 model ProjectEnvironment {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  projectId String   @db.ObjectId
+  id        String   @id @map("_id")
+  projectId String
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   name      String
   url       String?
@@ -182,10 +182,10 @@ model ProjectEnvironment {
 }
 
 model ProjectAssignment {
-  id               String    @id @default(auto()) @map("_id") @db.ObjectId
-  employeeId       String    @db.ObjectId
+  id               String    @id @map("_id")
+  employeeId       String
   employee         User      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  projectId        String    @db.ObjectId
+  projectId        String
   project          Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   roleOnProject    String?
   accessLevel      String    @default("view")
@@ -197,8 +197,8 @@ model ProjectAssignment {
 }
 
 model VaultCollection {
-  id               String         @id @default(auto()) @map("_id") @db.ObjectId
-  projectId        String         @db.ObjectId
+  id               String         @id @map("_id")
+  projectId        String
   project          Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
   provider         String?
   rotationPolicy   String?
@@ -209,8 +209,8 @@ model VaultCollection {
 }
 
 model VaultSecret {
-  id             String               @id @default(auto()) @map("_id") @db.ObjectId
-  collectionId   String               @db.ObjectId
+  id             String               @id @map("_id")
+  collectionId   String
   collection     VaultCollection      @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   secretType     String
   username       String?
@@ -224,8 +224,8 @@ model VaultSecret {
 }
 
 model VaultSecretVersion {
-  id             String      @id @default(auto()) @map("_id") @db.ObjectId
-  secretId       String      @db.ObjectId
+  id             String      @id @map("_id")
+  secretId       String
   secret         VaultSecret @relation(fields: [secretId], references: [id], onDelete: Cascade)
   version        Int
   encryptedValue String
@@ -233,14 +233,14 @@ model VaultSecretVersion {
 }
 
 model AccessRequest {
-  id                String    @id @default(auto()) @map("_id") @db.ObjectId
-  requesterId       String    @db.ObjectId
+  id                String    @id @map("_id")
+  requesterId       String
   requester         User      @relation("requester", fields: [requesterId], references: [id], onDelete: Cascade)
-  projectId         String    @db.ObjectId
+  projectId         String
   project           Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   secretScope       String
   status            String    @default("pending")
-  approverId        String?   @db.ObjectId
+  approverId        String?
   approver          User?     @relation("approver", fields: [approverId], references: [id])
   approvalTimestamp DateTime?
   expiresAt         DateTime?
@@ -248,8 +248,8 @@ model AccessRequest {
 }
 
 model RotationTask {
-  id           String          @id @default(auto()) @map("_id") @db.ObjectId
-  collectionId String          @db.ObjectId
+  id           String          @id @map("_id")
+  collectionId String
   collection   VaultCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   status       String          @default("pending")
   snoozedUntil DateTime?
@@ -260,8 +260,8 @@ model RotationTask {
 }
 
 model Task {
-  id         String    @id @default(auto()) @map("_id") @db.ObjectId
-  projectId  String    @db.ObjectId
+  id         String    @id @map("_id")
+  projectId  String
   project    Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   name       String
   assignedTo String?
@@ -273,10 +273,10 @@ model Task {
 }
 
 model Communication {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  clientId  String?  @db.ObjectId
+  id        String   @id @map("_id")
+  clientId  String?
   client    Client?  @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  projectId String?  @db.ObjectId
+  projectId String?
   project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
   type      String
   subject   String?
@@ -286,17 +286,17 @@ model Communication {
 }
 
 model InvoiceTemplate {
-  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  id          String   @id @map("_id")
   name        String   @default("Default Template")
   htmlContent String
   createdAt   DateTime @default(now())
 }
 
 model Invoice {
-  id                  String            @id @default(auto()) @map("_id") @db.ObjectId
-  clientId            String            @db.ObjectId
+  id                  String            @id @map("_id")
+  clientId            String
   client              Client            @relation(fields: [clientId], references: [id])
-  projectId           String?           @db.ObjectId
+  projectId           String?
   project             Project?          @relation(fields: [projectId], references: [id])
   invoiceNumber       String            @unique
   issueDate           DateTime
@@ -334,8 +334,8 @@ model Invoice {
 }
 
 model InvoiceSchedule {
-  id             String    @id @default(auto()) @map("_id") @db.ObjectId
-  invoiceId      String    @db.ObjectId
+  id             String    @id @map("_id")
+  invoiceId      String
   invoice        Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   milestoneName  String
   percentage     Float?
@@ -349,8 +349,8 @@ model InvoiceSchedule {
 }
 
 model InvoiceLineItem {
-  id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  invoiceId   String   @db.ObjectId
+  id          String   @id @map("_id")
+  invoiceId   String
   invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   description String
   quantity    Int
@@ -359,12 +359,12 @@ model InvoiceLineItem {
 }
 
 model Income {
-  id            String    @id @default(auto()) @map("_id") @db.ObjectId
-  clientId      String    @db.ObjectId
+  id            String    @id @map("_id")
+  clientId      String
   client        Client    @relation(fields: [clientId], references: [id])
-  projectId     String?   @db.ObjectId
+  projectId     String?
   project       Project?  @relation(fields: [projectId], references: [id])
-  invoiceId     String?   @db.ObjectId
+  invoiceId     String?
   invoice       Invoice?  @relation(fields: [invoiceId], references: [id])
   amount        Float
   currency      String
@@ -375,7 +375,7 @@ model Income {
 }
 
 model TaxProfile {
-  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  id            String   @id @map("_id")
   name          String
   rate          Float
   taxMode       String
@@ -385,7 +385,7 @@ model TaxProfile {
 }
 
 model Expense {
-  id                String    @id @default(auto()) @map("_id") @db.ObjectId
+  id                String    @id @map("_id")
   description       String
   amount            Float
   currency          String
@@ -396,7 +396,7 @@ model Expense {
 
   recurrence        String?
   vendor            String?
-  projectId         String?   @db.ObjectId
+  projectId         String?
   project           Project?  @relation(fields: [projectId], references: [id])
   status            String    @default("paid")
   dueDate           DateTime?
@@ -410,7 +410,7 @@ model Expense {
 }
 
 model Subscription {
-  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  id            String   @id @map("_id")
   provider      String
   serviceName   String
   cost          Float
@@ -422,8 +422,8 @@ model Subscription {
 }
 
 model SalaryRecord {
-  id             String    @id @default(auto()) @map("_id") @db.ObjectId
-  employeeId     String    @db.ObjectId
+  id             String    @id @map("_id")
+  employeeId     String
   employee       User      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   employmentType String
   grossAmount    Float
@@ -439,8 +439,8 @@ model SalaryRecord {
 }
 
 model AuditLog {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId    String?  @db.ObjectId
+  id        String   @id @map("_id")
+  userId    String?
   user      User?    @relation(fields: [userId], references: [id])
   action    String
   details   String
@@ -450,8 +450,8 @@ model AuditLog {
 }
 
 model ProfitabilitySnapshot {
-  id               String   @id @default(auto()) @map("_id") @db.ObjectId
-  projectId        String   @unique @db.ObjectId
+  id               String   @id @map("_id")
+  projectId        String   @unique
   project          Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   revenue          Float    @default(0.00)
   directCost       Float    @default(0.00)
@@ -463,8 +463,8 @@ model ProfitabilitySnapshot {
 }
 
 model WebsiteMonitor {
-  id                String    @id @default(auto()) @map("_id") @db.ObjectId
-  projectId         String    @db.ObjectId
+  id                String    @id @map("_id")
+  projectId         String
   project           Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   url               String
   lastStatus        String?
@@ -475,8 +475,8 @@ model WebsiteMonitor {
 }
 
 model InvoiceDiscount {
-  id               String   @id @default(auto()) @map("_id") @db.ObjectId
-  invoiceId        String   @db.ObjectId
+  id               String   @id @map("_id")
+  invoiceId        String
   invoice          Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
   invoiceItemId    String?
@@ -498,7 +498,7 @@ model InvoiceDiscount {
 }
 
 model TechnologyCatalogue {
-  id                   String   @id @default(auto()) @map("_id") @db.ObjectId
+  id                   String   @id @map("_id")
   name                 String   @unique
   vendor               String?
   category             String
@@ -517,8 +517,8 @@ model TechnologyCatalogue {
 }
 
 model TechnologyFieldDefinition {
-  id           String              @id @default(auto()) @map("_id") @db.ObjectId
-  technologyId String              @db.ObjectId
+  id           String              @id @map("_id")
+  technologyId String
   technology   TechnologyCatalogue @relation(fields: [technologyId], references: [id], onDelete: Cascade)
 
   fieldKey     String
@@ -533,8 +533,8 @@ model TechnologyFieldDefinition {
 }
 
 model TechnologyAccount {
-  id                String   @id @default(auto()) @map("_id") @db.ObjectId
-  technologyId      String   @db.ObjectId
+  id                String   @id @map("_id")
+  technologyId      String
   technology        TechnologyCatalogue @relation(fields: [technologyId], references: [id])
 
   accountName       String
@@ -574,12 +574,11 @@ model TechnologyAccount {
 }
 
 model ProjectTechnologyLink {
-  id                  String            @id @default(auto()) @map("_id") @db.ObjectId
-  projectId           String            @db.ObjectId
-  technologyAccountId String            @db.ObjectId
-
-  project           Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  technologyAccount TechnologyAccount @relation(fields: [technologyAccountId], references: [id], onDelete: Cascade)
+  id                  String            @id @map("_id")
+  projectId           String
+  technologyAccountId String
+  project             Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  technologyAccount   TechnologyAccount @relation(fields: [technologyAccountId], references: [id], onDelete: Cascade)
 
   connectionType String?
   active         Boolean  @default(true)
@@ -587,8 +586,8 @@ model ProjectTechnologyLink {
 }
 
 model TechnologyEnvironment {
-  id                  String            @id @default(auto()) @map("_id") @db.ObjectId
-  technologyAccountId String            @db.ObjectId
+  id                  String            @id @map("_id")
+  technologyAccountId String
   technologyAccount   TechnologyAccount @relation(fields: [technologyAccountId], references: [id], onDelete: Cascade)
 
   environmentName String
@@ -603,11 +602,11 @@ model TechnologyEnvironment {
 }
 
 model TechnologyAccountField {
-  id                  String            @id @default(auto()) @map("_id") @db.ObjectId
-  technologyAccountId String            @db.ObjectId
+  id                  String            @id @map("_id")
+  technologyAccountId String
   technologyAccount   TechnologyAccount @relation(fields: [technologyAccountId], references: [id], onDelete: Cascade)
 
-  environmentId   String?           @db.ObjectId
+  environmentId   String?
   environment     TechnologyEnvironment? @relation(fields: [environmentId], references: [id])
   fieldKey        String
   fieldLabel      String
@@ -627,10 +626,10 @@ model TechnologyAccountField {
 }
 
 model VaultFieldAccessRequest {
-  id                  String            @id @default(auto()) @map("_id") @db.ObjectId
+  id                  String            @id @map("_id")
   requesterId         String
   projectId           String
-  technologyAccountId String            @db.ObjectId
+  technologyAccountId String
   technologyAccount   TechnologyAccount @relation(fields: [technologyAccountId], references: [id])
   environmentId       String?
 
@@ -650,11 +649,11 @@ model VaultFieldAccessRequest {
 }
 
 model VaultRequestedField {
-  id        String                  @id @default(auto()) @map("_id") @db.ObjectId
-  requestId String                  @db.ObjectId
+  id        String                  @id @map("_id")
+  requestId String
   request   VaultFieldAccessRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
 
-  accountFieldId String            @db.ObjectId
+  accountFieldId String
   accountField   TechnologyAccountField @relation(fields: [accountFieldId], references: [id])
 
   requested Boolean  @default(true)
@@ -666,11 +665,11 @@ model VaultRequestedField {
 }
 
 model EmployeeCredentialGrant {
-  id                  String @id @default(auto()) @map("_id") @db.ObjectId
+  id                  String @id @map("_id")
   employeeId          String
   projectId           String
-  technologyAccountId String @db.ObjectId
-  accountFieldId      String @db.ObjectId
+  technologyAccountId String
+  accountFieldId      String
   accountField        TechnologyAccountField @relation(fields: [accountFieldId], references: [id])
   technologyAccount   TechnologyAccount      @relation(fields: [technologyAccountId], references: [id])
   environmentId       String?
@@ -690,8 +689,8 @@ model EmployeeCredentialGrant {
 }
 
 model DispatchEntry {
-  id        String  @id @default(auto()) @map("_id") @db.ObjectId
-  projectId String  @db.ObjectId
+  id        String  @id @map("_id")
+  projectId String
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   clientId  String?
 
@@ -723,8 +722,8 @@ model DispatchEntry {
 }
 
 model DispatchParticipant {
-  id              String        @id @default(auto()) @map("_id") @db.ObjectId
-  dispatchEntryId String        @db.ObjectId
+  id              String        @id @map("_id")
+  dispatchEntryId String
   dispatchEntry   DispatchEntry @relation(fields: [dispatchEntryId], references: [id], onDelete: Cascade)
 
   participantType String
@@ -734,8 +733,8 @@ model DispatchParticipant {
 }
 
 model DispatchDecision {
-  id              String        @id @default(auto()) @map("_id") @db.ObjectId
-  dispatchEntryId String        @db.ObjectId
+  id              String        @id @map("_id")
+  dispatchEntryId String
   dispatchEntry   DispatchEntry @relation(fields: [dispatchEntryId], references: [id], onDelete: Cascade)
 
   decisionText String
@@ -743,8 +742,8 @@ model DispatchDecision {
 }
 
 model DispatchActionItem {
-  id              String        @id @default(auto()) @map("_id") @db.ObjectId
-  dispatchEntryId String        @db.ObjectId
+  id              String        @id @map("_id")
+  dispatchEntryId String
   dispatchEntry   DispatchEntry @relation(fields: [dispatchEntryId], references: [id], onDelete: Cascade)
 
   actionText     String
@@ -755,15 +754,15 @@ model DispatchActionItem {
 }
 
 model DispatchTag {
-  id              String        @id @default(auto()) @map("_id") @db.ObjectId
-  dispatchEntryId String        @db.ObjectId
+  id              String        @id @map("_id")
+  dispatchEntryId String
   dispatchEntry   DispatchEntry @relation(fields: [dispatchEntryId], references: [id], onDelete: Cascade)
 
   tag String
 }
 
 model Notification {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  id        String   @id @map("_id")
   userId    String
   type      String
   title     String

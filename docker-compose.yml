@@ -1,17 +1,16 @@
 version: '3.8'
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: suite-postgres-dev
+  mongodb:
+    image: mongo:7
+    container_name: suite-mongodb-dev
     environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: pass
-      POSTGRES_DB: suite
+      MONGO_INITDB_ROOT_USERNAME: user
+      MONGO_INITDB_ROOT_PASSWORD: pass
     ports:
-      - "5432:5432"
+      - "27017:27017"
     volumes:
-      - pgdata-dev:/var/lib/postgresql/data
+      - mongodata-dev:/data/db
     restart: always
 
   redis:
@@ -22,4 +21,4 @@ services:
     restart: always
 
 volumes:
-  pgdata-dev:
+  mongodata-dev:

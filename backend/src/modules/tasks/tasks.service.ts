@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/services/prisma.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
+import { randomUUID } from 'crypto';
 
 @Injectable()
 export class TasksService {
@@ -26,6 +27,7 @@ export class TasksService {
 
     return this.prisma.task.create({
       data: {
+        id: randomUUID(),
         ...rest,
         status,
         project: { connect: { id: projectId } },
