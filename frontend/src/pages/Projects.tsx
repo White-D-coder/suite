@@ -172,9 +172,10 @@ export default function Projects() {
       setFormError('Project name is required.');
       return;
     }
+    const { techStackRaw, ...restPayload } = form;
     createMutation.mutate({
-      ...form,
-      techStack: form.techStackRaw.split(',').map(s => s.trim()).filter(Boolean),
+      ...restPayload,
+      techStack: techStackRaw.split(',').map(s => s.trim()).filter(Boolean),
     });
   };
 

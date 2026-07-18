@@ -8,7 +8,7 @@ datasource db {
 }
 
 model User {
-  id           String          @id @map("_id")
+  id           String          @id @default(uuid()) @map("_id")
   email        String          @unique
   passwordHash String
   name         String          @default("Internal User")
@@ -25,7 +25,7 @@ model User {
 }
 
 model CompanySetting {
-  id            String   @id @map("_id")
+  id            String   @id @default(uuid()) @map("_id")
   userId        String   @unique
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   companyName   String?
@@ -35,7 +35,7 @@ model CompanySetting {
 }
 
 model Client {
-  id             String          @id @map("_id")
+  id             String          @id @default(uuid()) @map("_id")
   name           String
   company        String?
   email          String?
@@ -55,7 +55,7 @@ model Client {
 }
 
 model ClientContact {
-  id                  String          @id @map("_id")
+  id                  String          @id @default(uuid()) @map("_id")
   clientId            String
   client              Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
   name                String
@@ -73,7 +73,7 @@ model ClientContact {
 }
 
 model ContactChannel {
-  id              String        @id @map("_id")
+  id              String        @id @default(uuid()) @map("_id")
   contactId       String
   contact         ClientContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
   phoneType       String
@@ -83,7 +83,7 @@ model ContactChannel {
 }
 
 model Project {
-  id                 String                    @id @map("_id")
+  id                 String                    @id @default(uuid()) @map("_id")
   clientId           String
   client             Client                    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   name               String
@@ -129,7 +129,7 @@ model Project {
 }
 
 model ProjectContract {
-  id             String    @id @map("_id")
+  id             String    @id @default(uuid()) @map("_id")
   projectId      String
   project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   title          String
@@ -142,7 +142,7 @@ model ProjectContract {
 }
 
 model ProjectAccount {
-  id        String   @id @map("_id")
+  id        String   @id @default(uuid()) @map("_id")
   projectId String
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   provider  String
@@ -152,7 +152,7 @@ model ProjectAccount {
 }
 
 model ProjectToolSubscription {
-  id           String   @id @map("_id")
+  id           String   @id @default(uuid()) @map("_id")
   projectId    String
   project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   vendor       String
@@ -163,7 +163,7 @@ model ProjectToolSubscription {
 }
 
 model ProjectProgressUpdate {
-  id         String   @id @map("_id")
+  id         String   @id @default(uuid()) @map("_id")
   projectId  String
   project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   updaterId  String
@@ -173,7 +173,7 @@ model ProjectProgressUpdate {
 }
 
 model ProjectEnvironment {
-  id        String   @id @map("_id")
+  id        String   @id @default(uuid()) @map("_id")
   projectId String
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   name      String
@@ -182,7 +182,7 @@ model ProjectEnvironment {
 }
 
 model ProjectAssignment {
-  id               String    @id @map("_id")
+  id               String    @id @default(uuid()) @map("_id")
   employeeId       String
   employee         User      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   projectId        String
@@ -197,7 +197,7 @@ model ProjectAssignment {
 }
 
 model VaultCollection {
-  id               String         @id @map("_id")
+  id               String         @id @default(uuid()) @map("_id")
   projectId        String
   project          Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
   provider         String?
@@ -209,7 +209,7 @@ model VaultCollection {
 }
 
 model VaultSecret {
-  id             String               @id @map("_id")
+  id             String               @id @default(uuid()) @map("_id")
   collectionId   String
   collection     VaultCollection      @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   secretType     String
@@ -224,7 +224,7 @@ model VaultSecret {
 }
 
 model VaultSecretVersion {
-  id             String      @id @map("_id")
+  id             String      @id @default(uuid()) @map("_id")
   secretId       String
   secret         VaultSecret @relation(fields: [secretId], references: [id], onDelete: Cascade)
   version        Int
@@ -233,7 +233,7 @@ model VaultSecretVersion {
 }
 
 model AccessRequest {
-  id                String    @id @map("_id")
+  id                String    @id @default(uuid()) @map("_id")
   requesterId       String
   requester         User      @relation("requester", fields: [requesterId], references: [id], onDelete: Cascade)
   projectId         String
@@ -248,7 +248,7 @@ model AccessRequest {
 }
 
 model RotationTask {
-  id           String          @id @map("_id")
+  id           String          @id @default(uuid()) @map("_id")
   collectionId String
   collection   VaultCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   status       String          @default("pending")
@@ -260,7 +260,7 @@ model RotationTask {
 }
 
 model Task {
-  id         String    @id @map("_id")
+  id         String    @id @default(uuid()) @map("_id")
   projectId  String
   project    Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   name       String
@@ -273,7 +273,7 @@ model Task {
 }
 
 model Communication {
-  id        String   @id @map("_id")
+  id        String   @id @default(uuid()) @map("_id")
   clientId  String?
   client    Client?  @relation(fields: [clientId], references: [id], onDelete: Cascade)
   projectId String?
@@ -286,14 +286,14 @@ model Communication {
 }
 
 model InvoiceTemplate {
-  id          String   @id @map("_id")
+  id          String   @id @default(uuid()) @map("_id")
   name        String   @default("Default Template")
   htmlContent String
   createdAt   DateTime @default(now())
 }
 
 model Invoice {
-  id                  String            @id @map("_id")
+  id                  String            @id @default(uuid()) @map("_id")
   clientId            String
   client              Client            @relation(fields: [clientId], references: [id])
   projectId           String?
@@ -334,7 +334,7 @@ model Invoice {
 }
 
 model InvoiceSchedule {
-  id             String    @id @map("_id")
+  id             String    @id @default(uuid()) @map("_id")
   invoiceId      String
   invoice        Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   milestoneName  String
@@ -349,7 +349,7 @@ model InvoiceSchedule {
 }
 
 model InvoiceLineItem {
-  id          String   @id @map("_id")
+  id          String   @id @default(uuid()) @map("_id")
   invoiceId   String
   invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   description String
@@ -359,7 +359,7 @@ model InvoiceLineItem {
 }
 
 model Income {
-  id            String    @id @map("_id")
+  id            String    @id @default(uuid()) @map("_id")
   clientId      String
   client        Client    @relation(fields: [clientId], references: [id])
   projectId     String?
@@ -375,7 +375,7 @@ model Income {
 }
 
 model TaxProfile {
-  id            String   @id @map("_id")
+  id            String   @id @default(uuid()) @map("_id")
   name          String
   rate          Float
   taxMode       String
@@ -385,7 +385,7 @@ model TaxProfile {
 }
 
 model Expense {
-  id                String    @id @map("_id")
+  id                String    @id @default(uuid()) @map("_id")
   description       String
   amount            Float
   currency          String
@@ -410,7 +410,7 @@ model Expense {
 }
 
 model Subscription {
-  id            String   @id @map("_id")
+  id            String   @id @default(uuid()) @map("_id")
   provider      String
   serviceName   String
   cost          Float
@@ -422,7 +422,7 @@ model Subscription {
 }
 
 model SalaryRecord {
-  id             String    @id @map("_id")
+  id             String    @id @default(uuid()) @map("_id")
   employeeId     String
   employee       User      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   employmentType String
@@ -439,7 +439,7 @@ model SalaryRecord {
 }
 
 model AuditLog {
-  id        String   @id @map("_id")
+  id        String   @id @default(uuid()) @map("_id")
   userId    String?
   user      User?    @relation(fields: [userId], references: [id])
   action    String
@@ -450,7 +450,7 @@ model AuditLog {
 }
 
 model ProfitabilitySnapshot {
-  id               String   @id @map("_id")
+  id               String   @id @default(uuid()) @map("_id")
   projectId        String   @unique
   project          Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   revenue          Float    @default(0.00)
@@ -463,7 +463,7 @@ model ProfitabilitySnapshot {
 }
 
 model WebsiteMonitor {
-  id                String    @id @map("_id")
+  id                String    @id @default(uuid()) @map("_id")
   projectId         String
   project           Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   url               String
@@ -475,7 +475,7 @@ model WebsiteMonitor {
 }
 
 model InvoiceDiscount {
-  id               String   @id @map("_id")
+  id               String   @id @default(uuid()) @map("_id")
   invoiceId        String
   invoice          Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
@@ -498,7 +498,7 @@ model InvoiceDiscount {
 }
 
 model TechnologyCatalogue {
-  id                   String   @id @map("_id")
+  id                   String   @id @default(uuid()) @map("_id")
   name                 String   @unique
   vendor               String?
   category             String
@@ -517,7 +517,7 @@ model TechnologyCatalogue {
 }
 
 model TechnologyFieldDefinition {
-  id           String              @id @map("_id")
+  id           String              @id @default(uuid()) @map("_id")
   technologyId String
   technology   TechnologyCatalogue @relation(fields: [technologyId], references: [id], onDelete: Cascade)
 
@@ -533,7 +533,7 @@ model TechnologyFieldDefinition {
 }
 
 model TechnologyAccount {
-  id                String   @id @map("_id")
+  id                String   @id @default(uuid()) @map("_id")
   technologyId      String
   technology        TechnologyCatalogue @relation(fields: [technologyId], references: [id])
 
@@ -574,7 +574,7 @@ model TechnologyAccount {
 }
 
 model ProjectTechnologyLink {
-  id                  String            @id @map("_id")
+  id                  String            @id @default(uuid()) @map("_id")
   projectId           String
   technologyAccountId String
   project             Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -586,7 +586,7 @@ model ProjectTechnologyLink {
 }
 
 model TechnologyEnvironment {
-  id                  String            @id @map("_id")
+  id                  String            @id @default(uuid()) @map("_id")
   technologyAccountId String
   technologyAccount   TechnologyAccount @relation(fields: [technologyAccountId], references: [id], onDelete: Cascade)
 
@@ -602,7 +602,7 @@ model TechnologyEnvironment {
 }
 
 model TechnologyAccountField {
-  id                  String            @id @map("_id")
+  id                  String            @id @default(uuid()) @map("_id")
   technologyAccountId String
   technologyAccount   TechnologyAccount @relation(fields: [technologyAccountId], references: [id], onDelete: Cascade)
 
@@ -626,7 +626,7 @@ model TechnologyAccountField {
 }
 
 model VaultFieldAccessRequest {
-  id                  String            @id @map("_id")
+  id                  String            @id @default(uuid()) @map("_id")
   requesterId         String
   projectId           String
   technologyAccountId String
@@ -649,7 +649,7 @@ model VaultFieldAccessRequest {
 }
 
 model VaultRequestedField {
-  id        String                  @id @map("_id")
+  id        String                  @id @default(uuid()) @map("_id")
   requestId String
   request   VaultFieldAccessRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
 
@@ -665,7 +665,7 @@ model VaultRequestedField {
 }
 
 model EmployeeCredentialGrant {
-  id                  String @id @map("_id")
+  id                  String @id @default(uuid()) @map("_id")
   employeeId          String
   projectId           String
   technologyAccountId String
@@ -689,7 +689,7 @@ model EmployeeCredentialGrant {
 }
 
 model DispatchEntry {
-  id        String  @id @map("_id")
+  id        String  @id @default(uuid()) @map("_id")
   projectId String
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   clientId  String?
@@ -722,7 +722,7 @@ model DispatchEntry {
 }
 
 model DispatchParticipant {
-  id              String        @id @map("_id")
+  id              String        @id @default(uuid()) @map("_id")
   dispatchEntryId String
   dispatchEntry   DispatchEntry @relation(fields: [dispatchEntryId], references: [id], onDelete: Cascade)
 
@@ -733,7 +733,7 @@ model DispatchParticipant {
 }
 
 model DispatchDecision {
-  id              String        @id @map("_id")
+  id              String        @id @default(uuid()) @map("_id")
   dispatchEntryId String
   dispatchEntry   DispatchEntry @relation(fields: [dispatchEntryId], references: [id], onDelete: Cascade)
 
@@ -742,7 +742,7 @@ model DispatchDecision {
 }
 
 model DispatchActionItem {
-  id              String        @id @map("_id")
+  id              String        @id @default(uuid()) @map("_id")
   dispatchEntryId String
   dispatchEntry   DispatchEntry @relation(fields: [dispatchEntryId], references: [id], onDelete: Cascade)
 
@@ -754,7 +754,7 @@ model DispatchActionItem {
 }
 
 model DispatchTag {
-  id              String        @id @map("_id")
+  id              String        @id @default(uuid()) @map("_id")
   dispatchEntryId String
   dispatchEntry   DispatchEntry @relation(fields: [dispatchEntryId], references: [id], onDelete: Cascade)
 
@@ -762,7 +762,7 @@ model DispatchTag {
 }
 
 model Notification {
-  id        String   @id @map("_id")
+  id        String   @id @default(uuid()) @map("_id")
   userId    String
   type      String
   title     String

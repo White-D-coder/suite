@@ -49,4 +49,32 @@ export class UpdateProjectDto {
   @IsString()
   @IsOptional()
   deploymentPlatform?: string;
+
+  @IsString()
+  @IsOptional()
+  country?: string;
+
+  @IsString()
+  @IsOptional()
+  state?: string;
+
+  @IsString()
+  @IsOptional()
+  projectCategory?: string;
+
+  @IsString()
+  @IsOptional()
+  serviceType?: string;
+
+  @IsString()
+  @IsOptional()
+  contractStatus?: string;
+
+  @IsString()
+  @IsOptional()
+  progressStatus?: string;
+
+  @IsString()
+  @IsOptional()
+  currency?: string;
 }
