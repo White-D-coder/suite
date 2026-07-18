@@ -672,7 +672,7 @@ export default function ProjectDetails() {
                                 }
 
                                 // 3. Dispatch audit log entry
-                                await api.post('/dispatch', {
+                                await api.post(`/projects/${projectId}/dispatch`, {
                                   projectId,
                                   title: `Environment created: ${envForm.name}`,
                                   communicationType: 'system',
