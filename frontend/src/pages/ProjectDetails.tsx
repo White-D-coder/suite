@@ -818,10 +818,25 @@ export default function ProjectDetails() {
                 )}
 
                 {/* Owner/Admin: Lock secret button */}
-                {['owner', 'admin'].includes(role) && project.vaultCollections?.[0] && (
+                {['owner', 'admin'].includes(role) && (
                   <button
-                    onClick={() => {
-                      setSecretForm({ ...secretForm, collectionId: project.vaultCollections[0].id });
+                    onClick={async () => {
+                      let colId = project.vaultCollections?.[0]?.id;
+                      if (!colId) {
+                        try {
+                          const { data: newCol } = await api.post('/credentials/collections', {
+                            projectId,
+                            provider: 'default',
+                            rotationPolicy: 'every 90 days',
+                          });
+                          colId = newCol.id;
+                          qc.invalidateQueries({ queryKey: ['project-detail', projectId] });
+                        } catch (err: any) {
+                          alert('Failed to initialize vault collection');
+                          return;
+                        }
+                      }
+                      setSecretForm({ ...secretForm, collectionId: colId });
                       setSecretOpen(true);
                     }}
                     className="t-btn-ghost py-1 px-2.5 text-xs flex items-center gap-1"
@@ -838,7 +853,7 @@ export default function ProjectDetails() {
                 <DialogHeader><DialogTitle style={{ color: 'var(--text-primary)' }}>Lock Secured Credential</DialogTitle></DialogHeader>
                 <ErrBanner msg={secretError} />
                 <form onSubmit={e => { e.preventDefault(); lockSecretMutation.mutate(secretForm); }} className="space-y-4 pt-2">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <Field label="Username / ID"><input className={inputCls} placeholder="aws-user" value={secretForm.username} onChange={e => setSecretForm({ ...secretForm, username: e.target.value })} /></Field>
                     <Field label="Secret Type">
                       <select className={inputCls} style={{ background: 'var(--surface-card)', color: 'var(--text-primary)' }} value={secretForm.secretType} onChange={e => setSecretForm({ ...secretForm, secretType: e.target.value })}>
@@ -849,7 +864,7 @@ export default function ProjectDetails() {
                     </Field>
                   </div>
                   <Field label="Plaintext Secret Value"><input type="password" className={inputCls} placeholder="Enter secret..." value={secretForm.secretValue} onChange={e => setSecretForm({ ...secretForm, secretValue: e.target.value })} required /></Field>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <Field label="Tool / Provider"><input className={inputCls} placeholder="Vercel, AWS" value={secretForm.tool} onChange={e => setSecretForm({ ...secretForm, tool: e.target.value })} /></Field>
                     <Field label="Environment">
                       <select className={inputCls} style={{ background: 'var(--surface-card)', color: 'var(--text-primary)' }} value={secretForm.environment} onChange={e => setSecretForm({ ...secretForm, environment: e.target.value })}>
@@ -978,7 +993,7 @@ export default function ProjectDetails() {
                         </select>
                       </Field>
                       <Field label="Role on Project"><input className={inputCls} placeholder="Developer, Analyst" value={assignForm.roleOnProject} onChange={e => setAssignForm({ ...assignForm, roleOnProject: e.target.value })} /></Field>
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <Field label="Access level">
                           <select className={inputCls} style={{ background: 'var(--surface-card)', color: 'var(--text-primary)' }} value={assignForm.accessLevel} onChange={e => setAssignForm({ ...assignForm, accessLevel: e.target.value })}>
                             <option value="view">Read / View</option>
@@ -1042,7 +1057,7 @@ export default function ProjectDetails() {
                     <DialogHeader><DialogTitle style={{ color: 'var(--text-primary)' }}>Add Project SOW / Contract</DialogTitle></DialogHeader>
                     <form onSubmit={e => { e.preventDefault(); addContractMutation.mutate({ ...contractForm, projectId }); }} className="space-y-4 pt-2">
                       <Field label="Contract Title"><input className={inputCls} placeholder="SOW Phase 1, NDA" value={contractForm.title} onChange={e => setContractForm({ ...contractForm, title: e.target.value })} required /></Field>
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <Field label="Start Date"><input type="date" className={inputCls} value={contractForm.startDate} onChange={e => setContractForm({ ...contractForm, startDate: e.target.value })} required /></Field>
                         <Field label="End Date"><input type="date" className={inputCls} value={contractForm.endDate} onChange={e => setContractForm({ ...contractForm, endDate: e.target.value })} /></Field>
                       </div>
@@ -1135,7 +1150,7 @@ export default function ProjectDetails() {
                   <ErrBanner msg={taskError} />
                   <form onSubmit={e => { e.preventDefault(); setTaskError(''); if (!taskForm.name) { setTaskError('Task name is required.'); return; } createTaskMutation.mutate({ ...taskForm, projectId, progress: Number(taskForm.progress) }); }} className="space-y-4 pt-2">
                     <Field label="Task Name *"><input className={inputCls} style={rSm} placeholder="Setup schema migrations" value={taskForm.name} onChange={e => setTaskForm(f => ({ ...f, name: e.target.value }))} required /></Field>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <Field label="Assigned To"><input className={inputCls} style={rSm} placeholder="Dev lead" value={taskForm.assignedTo} onChange={e => setTaskForm(f => ({ ...f, assignedTo: e.target.value }))} /></Field>
                       <Field label="Deadline"><input type="date" className={inputCls} style={rSm} value={taskForm.deadline} onChange={e => setTaskForm(f => ({ ...f, deadline: e.target.value }))} /></Field>
                     </div>
@@ -1575,7 +1590,12 @@ function TechStackSection({ projectId }: { projectId: string }) {
       });
 
       // 3. Create Fields
-      const fieldDefs = selectedTech.fieldDefinitions || [];
+      const fieldDefs = (selectedTech.fieldDefinitions && selectedTech.fieldDefinitions.length > 0)
+        ? selectedTech.fieldDefinitions
+        : [
+            { fieldKey: 'username', fieldLabel: 'Username / ID', isSecret: false },
+            { fieldKey: 'password', fieldLabel: 'Password / Key', isSecret: true }
+          ];
       for (const def of fieldDefs) {
         const val = fieldValues[def.fieldKey];
         if (val !== undefined && val !== '') {
@@ -1755,39 +1775,42 @@ function TechStackSection({ projectId }: { projectId: string }) {
                 </div>
 
                 {/* Fields definition inputs */}
-                {selectedTech.fieldDefinitions && selectedTech.fieldDefinitions.length > 0 && (
-                  <div style={{ background: 'var(--surface-sunken)', borderRadius: 10, padding: '1rem', border: '1px solid var(--border-subtle)' }} className="space-y-3">
-                    <p style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Credential Values</p>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {selectedTech.fieldDefinitions.map((fd: any) => (
-                        <div key={fd.fieldKey}>
-                          <label style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 2 }}>
-                            {fd.fieldLabel} {fd.isRequired && <span className="text-red-500">*</span>} {fd.isSecret && <span style={{ color: '#f59e0b', fontSize: '0.6rem' }}>(Secret)</span>}
-                          </label>
-                          {fd.fieldType === 'textarea' ? (
-                            <textarea
-                              className={inputCls}
-                              rows={2}
-                              value={fieldValues[fd.fieldKey] || ''}
-                              onChange={e => setFieldValues({ ...fieldValues, [fd.fieldKey]: e.target.value })}
-                              placeholder={`Enter ${fd.fieldLabel}...`}
-                              required={fd.isRequired}
-                            />
-                          ) : (
-                            <input
-                              type={fd.isSecret ? 'password' : 'text'}
-                              className={inputCls}
-                              value={fieldValues[fd.fieldKey] || ''}
-                              onChange={e => setFieldValues({ ...fieldValues, [fd.fieldKey]: e.target.value })}
-                              placeholder={`Enter ${fd.fieldLabel}...`}
-                              required={fd.isRequired}
-                            />
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                <div style={{ background: 'var(--surface-sunken)', borderRadius: 10, padding: '1rem', border: '1px solid var(--border-subtle)' }} className="space-y-3">
+                  <p style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Credential Values</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {((selectedTech.fieldDefinitions && selectedTech.fieldDefinitions.length > 0)
+                      ? selectedTech.fieldDefinitions
+                      : [
+                          { fieldKey: 'username', fieldLabel: 'Username / ID', isSecret: false, isRequired: true },
+                          { fieldKey: 'password', fieldLabel: 'Password / Key', isSecret: true, isRequired: true }
+                        ]).map((fd: any) => (
+                      <div key={fd.fieldKey}>
+                        <label style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 2 }}>
+                          {fd.fieldLabel} {fd.isRequired && <span className="text-red-500">*</span>} {fd.isSecret && <span style={{ color: '#f59e0b', fontSize: '0.6rem' }}>(Secret)</span>}
+                        </label>
+                        {fd.fieldType === 'textarea' ? (
+                          <textarea
+                            className={inputCls}
+                            rows={2}
+                            value={fieldValues[fd.fieldKey] || ''}
+                            onChange={e => setFieldValues({ ...fieldValues, [fd.fieldKey]: e.target.value })}
+                            placeholder={`Enter ${fd.fieldLabel}...`}
+                            required={fd.isRequired}
+                          />
+                        ) : (
+                          <input
+                            type={fd.isSecret ? 'password' : 'text'}
+                            className={inputCls}
+                            value={fieldValues[fd.fieldKey] || ''}
+                            onChange={e => setFieldValues({ ...fieldValues, [fd.fieldKey]: e.target.value })}
+                            placeholder={`Enter ${fd.fieldLabel}...`}
+                            required={fd.isRequired}
+                          />
+                        )}
+                      </div>
+                    ))}
                   </div>
-                )}
+                </div>
 
                 <div className="flex justify-end gap-2 pt-2" style={{ borderTop: '1px solid var(--border-subtle)' }}>
                   <button type="button" className="t-btn-ghost text-sm" onClick={() => setOpen(false)}>Cancel</button>

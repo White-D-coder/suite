@@ -11,6 +11,7 @@
   /* ── Surfaces ─────────────────────────────────────── */
   --surface-body:   #F0F2F8;
   --surface-card:   #FFFFFF;
+  --surface-base:   #FFFFFF;
   --surface-muted:  #F5F7FE;
   --surface-sunken: #EEF0F8;
 

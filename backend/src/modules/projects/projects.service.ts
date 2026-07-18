@@ -18,15 +18,29 @@ export class ProjectsService {
       throw new NotFoundException(`Client with ID ${clientId} not found`);
     }
 
-    return this.prisma.project.create({
+    const projectId = randomUUID();
+    const project = await this.prisma.project.create({
       data: {
-        id: randomUUID(),
+        id: projectId,
         ...rest,
         client: { connect: { id: clientId } },
         startDate: startDate ? new Date(startDate) : undefined,
         deadline: deadline ? new Date(deadline) : undefined,
       },
     });
+
+    // Create default VaultCollection for the project so they can add secrets
+    await this.prisma.vaultCollection.create({
+      data: {
+        id: randomUUID(),
+        projectId: project.id,
+        provider: 'default',
+        rotationPolicy: 'every 90 days',
+        lastRotationDate: new Date(),
+      },
+    });
+
+    return project;
   }
 
   async findAll(user: any, filters?: any) {

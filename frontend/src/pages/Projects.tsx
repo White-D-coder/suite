@@ -383,7 +383,7 @@ export default function Projects() {
                   <textarea className={`${inputCls} h-14 resize-none`} style={{ borderRadius: 'var(--radius-sm)' }} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
                 </Field>
                 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <Field label="Category">
                     <select className={inputCls} style={{ background: 'var(--surface-card)', color: 'var(--text-primary)' }} value={form.projectCategory} onChange={e => setForm({ ...form, projectCategory: e.target.value })}>
                       <option value="web">Web App</option>
@@ -402,7 +402,7 @@ export default function Projects() {
                   </Field>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <Field label="Country">
                     <input className={inputCls} style={{ borderRadius: 'var(--radius-sm)' }} placeholder="United States" value={form.country} onChange={e => setForm({ ...form, country: e.target.value })} />
                   </Field>

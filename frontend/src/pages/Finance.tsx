@@ -29,7 +29,7 @@ interface Sub {
   billingCycle: string; renewalDate: string; duplicateWarning?: boolean;
 }
 
-interface FinancialTelemetry {
+interface FinancialAnalysisData {
   totalIncome: number;
   totalExpenses: number;
   totalSalaries: number;
@@ -97,9 +97,9 @@ export default function Finance() {
     enabled: ['owner', 'admin', 'finance'].includes(role),
   });
 
-  const telLoading = finLoading || profLoading;
+  const anaLoading = finLoading || profLoading;
 
-  const telemetry = useMemo<FinancialTelemetry | null>(() => {
+  const analytics = useMemo<FinancialAnalysisData | null>(() => {
     if (!financialData || !profitabilityData) return null;
     const totalIncome = financialData.summary?.totalIncome || 0;
     const totalExpenses = financialData.summary?.totalExpense || 0;
@@ -206,7 +206,7 @@ export default function Finance() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="t-page-title">Corporate Financial Operations</h1>
-          <p className="t-page-subtitle">Manage corporate expenditures, payroll registries, and P&amp;L telemetry.</p>
+          <p className="t-page-subtitle">Manage corporate expenditures, payroll registries, and P&amp;L performance.</p>
         </div>
 
         {activeTab === 'expenses' && (
@@ -445,34 +445,34 @@ export default function Finance() {
       {/* ── Tab 3: Financial Analyzer ── */}
       {activeTab === 'analyzer' && (
         <div className="space-y-6">
-          {telLoading ? (
+          {anaLoading ? (
             <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin" style={{ color: 'var(--accent)' }} /></div>
-          ) : telemetry ? (
+          ) : analytics ? (
             <>
               {/* Telemetry numbers grid */}
               <div className="grid gap-4 sm:grid-cols-4">
                 <div className="t-stat-card">
                   <p className="t-label">Total Revenues (USD)</p>
-                  <p className="text-xl font-black font-mono mt-1 text-emerald-400">${telemetry.totalIncome.toFixed(2)}</p>
+                  <p className="text-xl font-black font-mono mt-1 text-emerald-400">${analytics.totalIncome.toFixed(2)}</p>
                 </div>
                 <div className="t-stat-card">
                   <p className="t-label">Operating Expenses (USD)</p>
-                  <p className="text-xl font-black font-mono mt-1 text-red-400">${telemetry.totalExpenses.toFixed(2)}</p>
+                  <p className="text-xl font-black font-mono mt-1 text-red-400">${analytics.totalExpenses.toFixed(2)}</p>
                 </div>
                 <div className="t-stat-card">
                   <p className="t-label">Salaries / stipend payouts</p>
-                  <p className="text-xl font-black font-mono mt-1 text-orange-400">${telemetry.totalSalaries.toFixed(2)}</p>
+                  <p className="text-xl font-black font-mono mt-1 text-orange-400">${analytics.totalSalaries.toFixed(2)}</p>
                 </div>
                 <div className="t-stat-card">
                   <p className="t-label">Net Profit / Margin</p>
                   <div className="flex justify-between items-end mt-1">
-                    <p className={`text-xl font-black font-mono ${telemetry.netProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                      ${telemetry.netProfit.toFixed(2)}
+                    <p className={`text-xl font-black font-mono ${analytics.netProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      ${analytics.netProfit.toFixed(2)}
                     </p>
                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                      telemetry.marginPercentage >= 30 ? 'bg-emerald-500/10 text-emerald-400' : telemetry.marginPercentage >= 10 ? 'bg-amber-500/10 text-amber-400' : 'bg-red-500/10 text-red-400'
+                      analytics.marginPercentage >= 30 ? 'bg-emerald-500/10 text-emerald-400' : analytics.marginPercentage >= 10 ? 'bg-amber-500/10 text-amber-400' : 'bg-red-500/10 text-red-400'
                     }`}>
-                      {telemetry.marginPercentage.toFixed(1)}% Margin
+                      {analytics.marginPercentage.toFixed(1)}% Margin
                     </span>
                   </div>
                 </div>
@@ -484,8 +484,8 @@ export default function Finance() {
                 <div className="w-full bg-[var(--surface-sunken)] rounded-full h-3 border border-[var(--border-subtle)] overflow-hidden flex">
                   <div 
                     style={{ 
-                      width: `${Math.max(0, Math.min(100, telemetry.marginPercentage))}%`,
-                      background: telemetry.marginPercentage >= 30 ? 'var(--status-online)' : telemetry.marginPercentage >= 10 ? 'var(--status-idle)' : 'var(--status-offline)'
+                      width: `${Math.max(0, Math.min(100, analytics.marginPercentage))}%`,
+                      background: analytics.marginPercentage >= 30 ? 'var(--status-online)' : analytics.marginPercentage >= 10 ? 'var(--status-idle)' : 'var(--status-offline)'
                     }} 
                     className="h-full transition-all duration-500"
                   />
@@ -505,9 +505,9 @@ export default function Finance() {
                   <p className="text-xs mt-0.5 text-[var(--text-tertiary)]">Subscriptions identified as duplicates or inactive software seats.</p>
                 </div>
 
-                {telemetry.wastedSubscriptions.length > 0 ? (
+                {analytics.wastedSubscriptions.length > 0 ? (
                   <div className="space-y-2">
-                    {telemetry.wastedSubscriptions.map(sub => (
+                    {analytics.wastedSubscriptions.map(sub => (
                       <div key={sub.id} className="p-3 bg-red-500/5 border border-red-500/15 text-red-400 rounded-lg text-xs flex justify-between items-center gap-3">
                         <div>
                           <span className="font-bold text-[var(--text-primary)]">{sub.provider}</span>
@@ -534,7 +534,7 @@ export default function Finance() {
               <div className="t-card p-5 space-y-4">
                 <p className="font-semibold text-xs" style={{ color: 'var(--text-primary)' }}>Direct labor vs Indirect Tool Overhead Margin analysis</p>
                 <div className="space-y-3">
-                  {telemetry.projectMargins.map(pm => (
+                  {analytics.projectMargins.map(pm => (
                     <div key={pm.projectId} className="p-3 bg-[var(--surface-sunken)] border border-[var(--border-subtle)] rounded-lg text-xs">
                       <div className="flex justify-between items-center mb-2">
                         <span className="font-bold text-[var(--text-primary)]">{pm.projectName}</span>

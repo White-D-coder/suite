@@ -10,12 +10,12 @@ interface AuditLog {
   ipAddress?: string;
   userAgent?: string;
   details?: string;
-  user: {
+  user?: {
     id: string;
     email: string;
     name: string;
     role: string;
-  };
+  } | null;
 }
 
 export default function AuditLogs() {
@@ -29,8 +29,8 @@ export default function AuditLogs() {
   const filtered = logs?.filter(log => {
     const q = search.toLowerCase();
     return log.action.toLowerCase().includes(q) ||
-      log.user.name.toLowerCase().includes(q) ||
-      log.user.email.toLowerCase().includes(q) ||
+      (log.user?.name || 'system').toLowerCase().includes(q) ||
+      (log.user?.email || '').toLowerCase().includes(q) ||
       (log.ipAddress && log.ipAddress.includes(q)) ||
       (log.details && log.details.toLowerCase().includes(q));
   }) ?? [];
@@ -94,8 +94,12 @@ export default function AuditLogs() {
                       {new Date(log.createdAt).toLocaleString()}
                     </td>
                     <td className="py-2.5">
-                      <span className="font-bold text-[var(--text-primary)]">{log.user.name}</span>
-                      <span className="text-[10px] text-[var(--text-tertiary)] block">{log.user.email} ({log.user.role.toUpperCase()})</span>
+                      <span className="font-bold text-[var(--text-primary)]">{log.user?.name || 'System'}</span>
+                      {log.user ? (
+                        <span className="text-[10px] text-[var(--text-tertiary)] block">{log.user.email} ({log.user.role.toUpperCase()})</span>
+                      ) : (
+                        <span className="text-[10px] text-[var(--text-tertiary)] block">Automated background worker</span>
+                      )}
                     </td>
                     <td className="py-2.5 font-semibold text-red-400">
                       <span className="px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20 font-mono text-[10px]">
