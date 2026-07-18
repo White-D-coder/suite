@@ -38,4 +38,4 @@ COPY --from=builder /usr/src/app/prisma ./prisma
 EXPOSE 3000
 
 # Start backend services
-CMD ["node", "dist/main.js"]
+CMD ["node", "dist/src/main.js"]

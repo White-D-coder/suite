@@ -38,7 +38,24 @@ async function bootstrap() {
   const origins = frontendUrl.split(',').map(o => o.trim());
   app.enableCors({
     origin: (origin, callback) => {
-      if (!origin || origins.includes(origin) || origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+      
+      let isAllowed = origins.includes(origin) || 
+                      origins.includes(origin + '/') || 
+                      origin.startsWith('http://localhost:') || 
+                      origin.startsWith('http://127.0.0.1:');
+                      
+      try {
+        const hostname = new URL(origin).hostname;
+        if (hostname.endsWith('vercel.app') || hostname.endsWith('onrender.com')) {
+          isAllowed = true;
+        }
+      } catch (e) {}
+
+      if (isAllowed) {
         callback(null, true);
       } else {
         callback(new Error('Not allowed by CORS'));
