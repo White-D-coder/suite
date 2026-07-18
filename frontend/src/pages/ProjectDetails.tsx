@@ -28,7 +28,8 @@ interface Collection { id: string; provider?: string; rotationPolicy?: string; l
 interface ProjectDetail {
   id: string; name: string; description?: string; status: string; startDate?: string; deadline?: string;
   githubRepoUrl?: string; liveUrl?: string; stagingUrl?: string; techStack: string[];
-  hostingPlatform?: string; databasePlatform?: string; deploymentPlatform?: string;
+  hostingPlatform?: string;
+  system?: string; databasePlatform?: string; deploymentPlatform?: string;
   client: { id: string; name: string; company?: string };
   tasks: Task[]; websiteMonitors: Monitor[];
   assignments: Assignment[];
@@ -1535,6 +1536,8 @@ function TechStackSection({ projectId }: { projectId: string }) {
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [techSearch, setTechSearch] = useState('');
+  const [creatingTech, setCreatingTech] = useState(false);
 
   const load = () => {
     api.get(`/vault/project/${projectId}`).then(r => setTechLinks(r.data || []));
@@ -1605,6 +1608,11 @@ function TechStackSection({ projectId }: { projectId: string }) {
     }
   };
 
+  const filteredCatalogue = catalogue.filter((tech: any) =>
+    tech.name.toLowerCase().includes(techSearch.toLowerCase()) ||
+    tech.category.toLowerCase().includes(techSearch.toLowerCase())
+  );
+
   return (
     <div style={{ marginTop: '1rem', background: 'var(--surface-card)', borderRadius: 14, border: '1px solid var(--border-subtle)', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', borderBottom: '1px solid var(--border-subtle)', background: 'var(--surface-sunken)' }}>
@@ -1614,7 +1622,7 @@ function TechStackSection({ projectId }: { projectId: string }) {
           <span style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)', background: 'var(--surface-base)', padding: '2px 8px', borderRadius: 99, border: '1px solid var(--border-subtle)' }}>{techLinks.length} linked</span>
         </div>
 
-        <Dialog open={open} onOpenChange={(o) => { setOpen(o); if(!o) setSelectedTech(null); }}>
+        <Dialog open={open} onOpenChange={(o) => { setOpen(o); if(!o) { setSelectedTech(null); setTechSearch(''); setError(''); } }}>
           <DialogTrigger asChild>
             <button onClick={() => setOpen(true)} className="flex items-center justify-center w-7 h-7 rounded t-btn-ghost" style={{ padding: 0 }} aria-label="Add Technology Stack">
               <Plus size={14} />
@@ -1631,9 +1639,19 @@ function TechStackSection({ projectId }: { projectId: string }) {
 
             {!selectedTech ? (
               <div className="space-y-4 pt-2">
+                <div>
+                  <input
+                    type="text"
+                    placeholder="Search technology..."
+                    className="t-input w-full p-2.5 text-xs"
+                    style={{ borderRadius: 'var(--radius-sm)' }}
+                    value={techSearch}
+                    onChange={e => setTechSearch(e.target.value)}
+                  />
+                </div>
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Select a technology stack item to configure and store its credentials:</p>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, maxHeight: 320, overflowY: 'auto' }}>
-                  {catalogue.map((tech: any) => {
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, maxHeight: 260, overflowY: 'auto' }}>
+                  {filteredCatalogue.map((tech: any) => {
                     const color = TECH_CAT_COLORS[tech.category] || '#6366f1';
                     return (
                       <button
@@ -1667,6 +1685,40 @@ function TechStackSection({ projectId }: { projectId: string }) {
                     );
                   })}
                 </div>
+                {filteredCatalogue.length === 0 && techSearch.trim() && (
+                  <button
+                    type="button"
+                    disabled={creatingTech}
+                    onClick={async () => {
+                      setCreatingTech(true);
+                      setError('');
+                      try {
+                        const { data: newTech } = await api.post('/technologies', {
+                          name: techSearch.trim(),
+                          category: 'Other'
+                        });
+                        setCatalogue(prev => [...prev, newTech]);
+                        setSelectedTech(newTech);
+                        setAccountForm(f => ({ ...f, accountName: `${newTech.name} - Project Main` }));
+                        setTechSearch('');
+                      } catch (err: any) {
+                        setError(err.response?.data?.message || 'Failed to create new technology');
+                      } finally {
+                        setCreatingTech(false);
+                      }
+                    }}
+                    style={{
+                      width: '100%', textAlign: 'center', padding: '10px 12px',
+                      fontSize: '12px', color: 'var(--accent)', fontWeight: 600,
+                      background: 'none', border: '1px dashed var(--border-strong)', cursor: 'pointer',
+                      borderRadius: 8, transition: 'all 150ms'
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-sunken)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                  >
+                    {creatingTech ? 'Creating…' : `+ Create "${techSearch}" as new technology`}
+                  </button>
+                )}
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4 pt-2">

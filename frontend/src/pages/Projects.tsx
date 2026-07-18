@@ -14,6 +14,7 @@ interface Project {
   status: string;
   liveUrl?: string;
   hostingPlatform?: string;
+  system?: string;
   techStack: string[];
   country?: string;
   state?: string;
@@ -32,6 +33,7 @@ interface Client {
 }
 
 const emptyForm = {
+  system: '',
   clientId: '',
   name: '',
   description: '',
@@ -175,7 +177,7 @@ export default function Projects() {
     const { techStackRaw, ...restPayload } = form;
     createMutation.mutate({
       ...restPayload,
-      techStack: techStackRaw.split(',').map(s => s.trim()).filter(Boolean),
+      techStack: techStackRaw ? techStackRaw.split(',').map(s => s.trim()).filter(Boolean) : [],
     });
   };
 
@@ -250,7 +252,7 @@ export default function Projects() {
 
               <form onSubmit={handleSubmit} className="space-y-4 pt-2">
                 <Field label="Client *">
-                  <div ref={clientComboRef} style={{ position: 'relative' }}>
+                  <div ref={clientComboRef} style={{ position: 'relative', zIndex: clientDropdownOpen ? 100 : 1 }}>
                     {/* Trigger input */}
                     <div
                       style={{
@@ -409,14 +411,9 @@ export default function Projects() {
                   </Field>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <Field label="Hosting Platform">
-                    <input className={inputCls} style={{ borderRadius: 'var(--radius-sm)' }} placeholder="Vercel, AWS…" value={form.hostingPlatform} onChange={e => setForm({ ...form, hostingPlatform: e.target.value })} />
-                  </Field>
-                  <Field label="Tech Stack (comma separated)">
-                    <input className={inputCls} style={{ borderRadius: 'var(--radius-sm)' }} placeholder="React, NestJS…" value={form.techStackRaw} onChange={e => setForm({ ...form, techStackRaw: e.target.value })} />
-                  </Field>
-                </div>
+                <Field label="System">
+                  <input className={inputCls} style={{ borderRadius: 'var(--radius-sm)' }} placeholder="e.g. ERP, Billing, CRM…" value={form.system} onChange={e => setForm({ ...form, system: e.target.value })} />
+                </Field>
 
                 <div className="flex justify-end gap-2 pt-2">
                   <button type="button" className="t-btn-ghost text-sm" onClick={() => setOpen(false)}>Cancel</button>
@@ -593,7 +590,7 @@ export default function Projects() {
                 {/* Footer */}
                 <div className="flex items-center justify-between pt-3 border-t border-[var(--border-subtle)]">
                   <span className="text-[10px] font-semibold uppercase" style={{ color: 'var(--text-tertiary)' }}>
-                    {proj.hostingPlatform || 'Unspecified'}
+                    {proj.system || 'Unspecified'}
                   </span>
 
                   {role === 'employee' && (

@@ -77,4 +77,8 @@ export class UpdateProjectDto {
   @IsString()
   @IsOptional()
   currency?: string;
+
+  @IsString()
+  @IsOptional()
+  system?: string;
 }

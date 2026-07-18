@@ -81,4 +81,8 @@ export class CreateProjectDto {
   @IsString()
   @IsOptional()
   currency?: string;
+
+  @IsString()
+  @IsOptional()
+  system?: string;
 }

@@ -98,6 +98,7 @@ model Project {
   hostingPlatform    String?
   databasePlatform   String?
   deploymentPlatform String?
+  system             String?
   createdAt          DateTime                  @default(now())
 
   country            String?
