@@ -40,6 +40,20 @@ function LiveClock() {
 
 export default function SidebarLayout() {
   const [open, setOpen] = useState(true);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      if (mobile) {
+        setOpen(false);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    handleResize();
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [switching, setSwitching] = useState(false);
   const [showRolesDropdown, setShowRolesDropdown] = useState(false);
@@ -95,6 +109,37 @@ export default function SidebarLayout() {
   // Dynamic Navigation Sections based on User Role
   const role = currentUser?.role || 'employee';
 
+  const sidebarStyle: React.CSSProperties = isMobile
+    ? {
+        position: 'fixed',
+        left: 0,
+        top: 0,
+        bottom: 0,
+        height: '100vh',
+        width: open ? 'var(--sidebar-width)' : '0px',
+        minWidth: open ? 'var(--sidebar-width)' : '0px',
+        zIndex: 1000,
+        background: 'var(--sidebar-bg)',
+        borderRight: open ? '1px solid var(--border-subtle)' : 'none',
+        display: 'flex',
+        flexDirection: 'column',
+        transition: 'all 220ms cubic-bezier(0.4,0,0.2,1)',
+        overflow: 'hidden',
+        boxShadow: open ? 'var(--shadow-xl)' : 'none',
+      }
+    : {
+        width: open ? 'var(--sidebar-width)' : '60px',
+        minWidth: open ? 'var(--sidebar-width)' : '60px',
+        background: 'var(--sidebar-bg)',
+        borderRight: '1px solid var(--border-subtle)',
+        display: 'flex',
+        flexDirection: 'column',
+        transition: 'width 220ms cubic-bezier(0.4,0,0.2,1)',
+        overflow: 'hidden',
+        zIndex: 50,
+        flexShrink: 0,
+      };
+
   const navSections = [
     {
       label: 'Core',
@@ -137,20 +182,18 @@ export default function SidebarLayout() {
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--surface-body)' }}>
 
       {/* ── Sidebar ────────────────────────────────────── */}
-      <aside
-        style={{
-          width: open ? 'var(--sidebar-width)' : '60px',
-          minWidth: open ? 'var(--sidebar-width)' : '60px',
-          background: 'var(--sidebar-bg)',
-          borderRight: '1px solid var(--border-subtle)',
-          display: 'flex',
-          flexDirection: 'column',
-          transition: 'width 220ms cubic-bezier(0.4,0,0.2,1)',
-          overflow: 'hidden',
-          zIndex: 50,
-          flexShrink: 0,
-        }}
-      >
+      {isMobile && open && (
+        <div
+          onClick={() => setOpen(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.4)',
+            zIndex: 999,
+          }}
+        />
+      )}
+      <aside style={sidebarStyle}>
         {/* Logo bar */}
         <div style={{
           height: 60,
@@ -262,11 +305,13 @@ export default function SidebarLayout() {
           </button>
 
           {/* Breadcrumb */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-            <span style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', fontWeight: 500 }}>Suite</span>
-            <ChevronRight size={12} color="var(--text-tertiary)" />
-            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>{pageTitle}</span>
-          </div>
+          {!isMobile && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', fontWeight: 500 }}>Suite</span>
+              <ChevronRight size={12} color="var(--text-tertiary)" />
+              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>{pageTitle}</span>
+            </div>
+          )}
 
           <div style={{ flex: 1 }} />
 
@@ -293,7 +338,7 @@ export default function SidebarLayout() {
                 }}
               >
                 <Settings2 size={13} />
-                <span>Switch Role ({role.toUpperCase()})</span>
+                <span>{isMobile ? role.toUpperCase() : `Switch Role (${role.toUpperCase()})`}</span>
               </button>
 
               {showRolesDropdown && (
@@ -361,7 +406,7 @@ export default function SidebarLayout() {
               }}>
                 {currentUser?.name ? currentUser.name.charAt(0) : 'A'}
               </div>
-              {open && (
+              {!isMobile && (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
                   <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                     {currentUser?.name || 'Loading...'}
@@ -401,7 +446,7 @@ export default function SidebarLayout() {
         </header>
 
         {/* Page content */}
-        <main style={{ flex: 1, padding: '1.75rem 2rem', overflowY: 'auto' }}>
+        <main style={{ flex: 1, padding: isMobile ? '1rem' : '1.75rem 2rem', overflowY: 'auto' }}>
           {switching ? (
             <div style={{ display: 'flex', flex: 1, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '5rem 0' }}>
               <span className="animate-spin" style={{ fontSize: '2rem', color: 'var(--accent)' }}>⌛</span>
